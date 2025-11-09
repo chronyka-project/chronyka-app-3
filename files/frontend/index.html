@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tarefas Chronyka</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Ícone de Font Awesome para o botão de remoção e para o Checkbox -->
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <header class="header">
+        <h1>📋 App Tarefas Chronyka <span class="highlight">(Flask API)</span></h1>
+    </header>
+
+    <main class="container">
+        
+        <!-- Formulário para Adicionar Novo Item (POST) -->
+        <section class="form-section">
+            <h2>Adicionar Nova Tarefa</h2>
+            <form id="add-item-form" class="add-form">
+                <input type="text" id="item-titulo" placeholder="Título da Tarefa (ex: Criar rota POST)" required>
+                <textarea id="item-descricao" placeholder="Descrição (Opcional)"></textarea>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-plus"></i> Adicionar
+                </button>
+            </form>
+        </section>
+
+        <!-- Lista de Itens Existentes -->
+        <section class="list-section">
+            <h2>Minhas Tarefas</h2>
+            <div id="item-list" class="item-list">
+                <!-- Itens serão injetados aqui pelo script.js -->
+                <p class="loading-message">Carregando itens...</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal de Edição de Tarefas (Escondido por padrão) -->
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title">Editar Tarefa</h3>
+            <form id="edit-item-form" class="add-form">
+                <input type="hidden" id="edit-item-id">
+                
+                <label for="edit-titulo">Título:</label>
+                <input type="text" id="edit-titulo" required>
+                
+                <label for="edit-descricao">Descrição:</label>
+                <textarea id="edit-descricao"></textarea>
+                
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Salvar Alterações
+                    </button>
+                    <button type="button" id="close-modal-btn" class="btn-secondary">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
