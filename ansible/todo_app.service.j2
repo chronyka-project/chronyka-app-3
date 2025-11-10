@@ -1,0 +1,21 @@
+[Unit]
+Description=Gunicorn instance for the ToDo App (Ansible Deployed)
+After=network.target
+
+[Service]
+# Usuário e Grupo são definidos dinamicamente pelo Ansible
+User={{ ansible_user }}
+Group={{ ansible_user }} 
+
+# Diretório de trabalho do projeto
+WorkingDirectory=/home/{{ ansible_user }}/todo_app
+
+# O comando que o systemd executará. Ele roda o Gunicorn no ambiente virtual
+ExecStart=/home/{{ ansible_user }}/todo_app/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
+
+# Reinicialização em caso de falha
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

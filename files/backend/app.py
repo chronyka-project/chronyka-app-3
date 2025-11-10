@@ -100,6 +100,11 @@ def delete_item(item_id):
         
     return jsonify({"message": "Item deleted"}), 200
 
+@app.route("/health")
+def health():
+    return "ok", 200
+
+
 if __name__ == '__main__':
     # Rodar no localhost (127.0.0.1) na porta 5000
     # O debug=True é ideal para desenvolvimento local
