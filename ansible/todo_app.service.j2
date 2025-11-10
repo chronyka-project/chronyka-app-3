@@ -3,16 +3,16 @@ Description=Gunicorn instance for the ToDo App (Ansible Deployed)
 After=network.target
 
 [Service]
-# Usa o usuário definido na variável app_user do playbook
+# Usa o usuário e grupo definidos no playbook (todo_app_user)
 User={{ app_user }}
 Group={{ app_user }} 
 
-# Diretório de trabalho do projeto (Corrigido para usar a variável app_dir)
+# Diretório de trabalho do projeto: /opt/todo_app
 WorkingDirectory={{ app_dir }}
 
-# O comando que o systemd executará. 
-# Usa os caminhos definidos no playbook.
-ExecStart={{ app_dir }}/{{ venv_name }}/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
+# O comando que o systemd executará, usando a variável de ponto de entrada corrigida:
+# ExecStart=/opt/todo_app/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 backend.app:app
+ExecStart={{ app_dir }}/{{ venv_name }}/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 {{ gunicorn_entry_point }}
 
 # Reinicialização em caso de falha
 Restart=always

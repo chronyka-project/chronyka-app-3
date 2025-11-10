@@ -9,7 +9,7 @@
     app_dir: "/opt/todo_app"
     python_version: "python3"
     venv_name: "venv"
-    gunicorn_entry_point: "app:app"
+    gunicorn_entry_point: "backend.app:app"
     app_port: '5000' 
 
   tasks:
