@@ -1,78 +1,98 @@
-- name: Deploy and Configure Flask ToDo App with Gunicorn and Systemd
-  hosts: sua_vm_ip_ou_nome # Substitua pelo IP da VM ou pelo nome do grupo no seu inventário
-  become: yes # Executa tarefas com privilégios de root (necessário para apt e systemd)
+---
+- name: Setup ToDo Flask Application
+  hosts: all
+  gather_facts: yes
+  become: yes
 
   vars:
-    app_dir: "/home/{{ ansible_user }}/todo_app"
-    service_name: "todo_app"
+    app_user: "todo_app_user"
+    app_dir: "/opt/todo_app"
+    python_version: "python3"
+    venv_name: "venv"
+    gunicorn_entry_point: "app:app"
+    # Nova variável para a porta da aplicação (onde o exporter também roda por padrão)
+    app_port: '5000' 
 
   tasks:
-    - name: 1. Instalar dependências essenciais (Python, venv, ufw)
+    - name: Install System Dependencies
       ansible.builtin.apt:
         name: 
-          - python3
-          - python3-venv
-          - python3-pip
-          - ufw 
+          - "{{ python_version }}"
+          - "{{ python_version }}-venv"
+          - "python3-pip"
+          - "build-essential"
         state: present
         update_cache: yes
 
-    - name: 2. Criar diretório do projeto e garantir permissões
+    # 1. Criação de Usuário e Diretório
+    - name: Create dedicated user and directory
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        state: present
+        system: yes
+      
+    - name: Create application directory
       ansible.builtin.file:
         path: "{{ app_dir }}"
         state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
         mode: '0755'
-
-    - name: 3. Copiar o arquivo principal do aplicativo (app.py)
-      # Nota: Certifique-se de que o app.py completo (com as rotas /itens) 
-      # está na mesma pasta onde você executa o playbook.
+    
+      # Tarefa: copiar todo o conteúdo da pasta 'files/' (que está na raiz do repo) 
+      # Deve conter o requirements.txt ATUALIZADO com 'prometheus-flask-exporter'.
+    - name: Copy Application Files (Code and Requirements)
       ansible.builtin.copy:
-        src: ./app.py 
-        dest: "{{ app_dir }}/app.py"
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0644'
+       src: ../files/
+       dest: "{{ app_dir }}"
+       owner: "{{ app_user }}"
+       group: "{{ app_user }}"
+       # Use 0755 para o diretório se você estiver copiando a pasta inteira
+       mode: '0755'
 
-    - name: 4. Configurar Ambiente Virtual (venv)
-      ansible.builtin.command: python3 -m venv {{ app_dir }}/venv
+    - name: Create Python Virtual Environment
+      ansible.builtin.command: "{{ python_version }} -m venv {{ venv_name }}"
       args:
-        creates: "{{ app_dir }}/venv/bin/activate" # Evita re-execução
+        chdir: "{{ app_dir }}"
+        creates: "{{ app_dir }}/{{ venv_name }}"
 
-    - name: 5. Instalar Python dependências no venv (Flask, Gunicorn, CORS)
+    - name: Install Python dependencies (Flask/Gunicorn/Exporter)
+      # Esta tarefa instalará o prometheus-flask-exporter se ele estiver no requirements.txt
       ansible.builtin.pip:
-        name: 
-          - Flask
-          - gunicorn
-          - flask-cors
-        virtualenv: "{{ app_dir }}/venv"
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/{{ venv_name }}"
 
-    - name: 6. Copiar e Configurar Template do Serviço Systemd
+    # 3. Configuração do Systemd
+    - name: Set up Systemd Service File using Template
       ansible.builtin.template:
-        src: todo_app.service.j2 # Usando o template que criamos
-        dest: /etc/systemd/system/{{ service_name }}.service
+        # A fonte (src) é o arquivo .j2 dentro da pasta 'ansible/'
+        src: todo_app.service.j2 
+        # O destino (dest) é onde o Systemd espera encontrar o arquivo
+        dest: /etc/systemd/system/todo_app.service
         owner: root
         group: root
         mode: '0644'
-      notify: 
-        - Reload Systemd
-
-    - name: 7. Abrir porta 5000 no firewall (UFW)
-      community.general.ufw:
+      notify:
+        - Restart Flask Service
+      
+    - name: Install UFW package
+      ansible.builtin.apt:
+       name: ufw
+       state: present
+       update_cache: yes
+    
+    # Abrindo a porta principal da aplicação (Node Exporter roda aqui)
+    - name: Allow incoming traffic on application port ({{ app_port }})
+      ansible.builtin.ufw:
         rule: allow
-        port: 5000
+        port: '{{ app_port }}'
         proto: tcp
         state: enabled
 
-    - name: 8. Habilitar e iniciar o serviço Gunicorn
-      ansible.builtin.systemd:
-        name: "{{ service_name }}"
-        enabled: yes
-        state: started
-        daemon_reload: yes # Garante que o systemd carregue o novo arquivo de serviço
-
   handlers:
-    - name: Reload Systemd
+    - name: Restart Flask Service
       ansible.builtin.systemd:
+        name: todo_app
+        state: restarted
         daemon_reload: yes
+        enabled: yes

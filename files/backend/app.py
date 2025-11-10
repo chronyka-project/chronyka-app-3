@@ -1,7 +1,10 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
 
 # Configuração do CORS para ambiente local
 # Permite acesso apenas do seu frontend rodando no http-server (porta 8080)

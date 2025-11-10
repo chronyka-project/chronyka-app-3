@@ -30,6 +30,7 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
   AWS_DEFAULT_REGION: us-east-1
+  TF_IN_AUTOMATION: true
 
 jobs:
   terraform-dev:
@@ -194,3 +195,72 @@ jobs:
       - name: Terraform Destroy (DEV)
         run: /usr/local/bin/terraform destroy -auto-approve
         working-directory: ./terraform/dev
+
+#####################################################################
+  # NOVO JOB: PROVISIONAMENTO AWS PROD (Terraform)
+#####################################################################
+  terraform-prod:
+    runs-on: ubuntu-latest
+    # Roda em push para 'prod' OU se selecionado manualmente como 'prod'.
+    if: github.ref == 'refs/heads/prod' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'PROD')
+    
+    environment:
+      name: PROD
+      # URL de produção.
+      url: http://${{ steps.get-alb-dns.outputs.alb_dns }}
+    
+    outputs:
+      alb_dns: ${{ steps.get-alb-dns.outputs.alb_dns }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Instala o Terraform no runner
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          # Define a versão do Terraform que você deseja usar (ex: 1.8.x)
+          terraform_version: 1.8.0 
+
+      - name: Terraform Init (PROD AWS)
+        id: init
+        # Agora o comando é apenas 'terraform init'
+        run: terraform init
+        working-directory: ./terraform/prod
+
+      - name: Terraform Apply (PROD AWS)
+        # Agora o comando é apenas 'terraform apply'
+        run: terraform apply -auto-approve
+        working-directory: ./terraform/prod
+
+      - name: Get ALB DNS Name
+        id: get-alb-dns
+        # Agora o comando é apenas 'terraform output'
+        run: echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+        working-directory: ./terraform/prod
+
+#####################################################################
+# JOB: DESTRUIR AMBIENTE QA APÓS SUCESSO NO PROD
+#####################################################################
+  destroy-qa-after-prod:
+    runs-on: self-hosted
+    needs: [terraform-prod]
+    # Inclui o push para 'prod' e o trigger manual
+    if: success() && (github.ref == 'refs/heads/prod' || github.event.inputs.target_environment == 'PROD') 
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init (QA Destroy)
+        run: /usr/local/bin/terraform init
+        working-directory: ./terraform/qa
+
+      - name: Terraform Plan Destroy (DEBUG)
+        run: /usr/local/bin/terraform plan -destroy
+        working-directory: ./terraform/qa
+
+      - name: Terraform Destroy (QA)
+        run: /usr/local/bin/terraform destroy -auto-approve
+        working-directory: ./terraform/qa
