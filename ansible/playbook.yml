@@ -10,6 +10,7 @@
     python_version: "python3"
     venv_name: "venv"
     gunicorn_entry_point: "app:app"
+    # Nova variável para a porta da aplicação (onde o exporter também roda por padrão)
     app_port: '5000' 
 
   tasks:
@@ -20,7 +21,7 @@
           - "{{ python_version }}-venv"
           - "python3-pip"
           - "build-essential"
-          - "ufw"
+          - "ufw" # Adicionando ufw aqui para instalar com outras dependências
         state: present
         update_cache: yes
 
@@ -39,26 +40,16 @@
         group: "{{ app_user }}"
         mode: '0755'
     
-      # Tarefa CORRIGIDA: Copiar os arquivos do backend para a pasta de destino na VM.
-      # O caminho de origem (src) foi corrigido de '../files/' para 'files/backend/'.
-    - name: Copy Application Backend Files (app.py and requirements.txt)
+      # Tarefa CORRIGIDA FINAL: Copiar todo o conteúdo de 'files/backend/'
+      # O caminho '../files/backend/' é relativo à localização do playbook (ansible/)
+    - name: Copy Application Backend Files (Code and Requirements)
       ansible.builtin.copy:
-       # Corrigido: Usamos 'files/backend/' para pegar app.py e outros arquivos.
-       src: files/backend/ 
-       dest: "{{ app_dir }}"
-       owner: "{{ app_user }}"
-       group: "{{ app_user }}"
-       mode: '0755'
-
-    # Se você também precisar do requirements.txt que está na raiz de 'files/', use a tarefa abaixo:
-    # - name: Copy root requirements.txt (if necessary)
-    #   ansible.builtin.copy:
-    #    src: files/requirements.txt
-    #    dest: "{{ app_dir }}/requirements.txt"
-    #    owner: "{{ app_user }}"
-    #    group: "{{ app_user }}"
-    #    mode: '0644'
-    # NOTA: Se o requirements.txt estiver dentro de 'files/backend/' junto com o 'app.py', a tarefa acima já resolve.
+        # Corrigido: Sair de 'ansible/', entrar em 'files/', depois em 'backend/'
+        src: ../files/backend/
+        dest: "{{ app_dir }}"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0755' # Garante que os arquivos e a pasta são copiados com permissão correta
 
     - name: Create Python Virtual Environment
       ansible.builtin.command: "{{ python_version }} -m venv {{ venv_name }}"
@@ -75,8 +66,8 @@
     - name: Set up Systemd Service File using Template
       ansible.builtin.template:
         # A fonte (src) é o arquivo .j2 dentro da pasta 'ansible/'
-        # O caminho relativo 'todo_app.service.j2' geralmente funciona bem aqui.
         src: todo_app.service.j2 
+        # O destino (dest) é onde o Systemd espera encontrar o arquivo
         dest: /etc/systemd/system/todo_app.service
         owner: root
         group: root
