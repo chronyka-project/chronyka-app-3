@@ -9,9 +9,8 @@
     app_dir: "/opt/todo_app"
     python_version: "python3"
     venv_name: "venv"
-    # CORREÇÃO CRÍTICA: Gunicorn Entry Point corrigido.
-    # A aplicação está em /opt/todo_app/backend/app.py, então o módulo é backend.app
-    gunicorn_entry_point: "backend.app:app" 
+    # CORREÇÃO CRÍTICA: Agora que app.py está na raiz do deploy, voltamos ao padrão 'app:app'
+    gunicorn_entry_point: "app:app" 
     app_port: '5000' 
 
   tasks:
@@ -41,16 +40,16 @@
         group: "{{ app_user }}"
         mode: '0755'
     
-    # TAREFA DE CÓPIA ÚNICA (Corrigida): 
-    # Copia todo o conteúdo da pasta de origem (código e requirements.txt)
-    - name: Copy Application Backend Files (Code and Requirements)
+    # 2. TAREFA DE CÓPIA: Copia o conteúdo da pasta 'files/' (raiz) para '{{ app_dir }}'.
+    # Isso copia app.py e requirements.txt.
+    - name: Copy Application Files (Code and Requirements)
       ansible.builtin.copy:
-        # Caminho: Sai de 'ansible/', entra em 'files/', depois em 'backend/'
-        src: ../files/backend/
+        # Caminho corrigido: Sai de 'ansible/', vai para a raiz do repo, e entra em 'files/'
+        src: ../files/
         dest: "{{ app_dir }}"
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
-        mode: '0755' # Garante que os arquivos e a pasta são copiados com permissão correta
+        mode: '0755' 
 
     - name: Create Python Virtual Environment
       ansible.builtin.command: "{{ python_version }} -m venv {{ venv_name }}"
@@ -60,8 +59,7 @@
 
     - name: Install Python dependencies (Flask/Gunicorn/Exporter)
       ansible.builtin.pip:
-        # Agora o requirements.txt estará em /opt/todo_app/requirements.txt
-        requirements: "{{ app_dir }}/requirements.txt" 
+        requirements: "{{ app_dir }}/requirements.txt"
         virtualenv: "{{ app_dir }}/{{ venv_name }}"
 
     # 3. Configuração do Systemd
@@ -81,11 +79,10 @@
         port: '{{ app_port }}'
         proto: tcp
         state: enabled
-
+      
   handlers:
     - name: Restart Flask Service
-      ansible.builtin.systemd:
+      ansible.builtin.systemd_service:
         name: todo_app
         state: restarted
         daemon_reload: yes
-        enabled: yes
