@@ -70,7 +70,7 @@ jobs:
         working-directory: ./terraform/dev
         
       - name: Wait for VM to boot and SSH to be ready
-        run: sleep 120 
+        run: sleep 150 
   
   configure-vm-dev:
     runs-on: self-hosted
