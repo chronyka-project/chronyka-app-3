@@ -98,7 +98,16 @@ jobs:
         run: |
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
           chmod 600 /tmp/ansible_key
-          
+      
+      - name: DEBUG - List files expected by Ansible
+        run: |
+          echo "Current directory is: $(pwd)"
+          echo "Listing content of: files/"
+          ls -la files/
+          echo "Listing content of: ansible/"
+          ls -la ansible/
+        continue-on-error: true # Não deixe que isso falhe o job    
+      
       - name: Run Ansible Playbook to Setup Flask
         # Usando as variáveis globais do Ansible definidas no 'env' do job
         run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
