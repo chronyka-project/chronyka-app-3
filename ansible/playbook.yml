@@ -10,7 +10,6 @@
     python_version: "python3"
     venv_name: "venv"
     gunicorn_entry_point: "app:app"
-    # Nova variável para a porta da aplicação (onde o exporter também roda por padrão)
     app_port: '5000' 
 
   tasks:
@@ -21,7 +20,7 @@
           - "{{ python_version }}-venv"
           - "python3-pip"
           - "build-essential"
-          - "ufw" # Adicionando ufw aqui para instalar com outras dependências
+          - "ufw"
         state: present
         update_cache: yes
 
@@ -40,11 +39,11 @@
         group: "{{ app_user }}"
         mode: '0755'
     
-      # Tarefa CORRIGIDA FINAL: Copiar todo o conteúdo de 'files/backend/'
-      # O caminho '../files/backend/' é relativo à localização do playbook (ansible/)
+    # TAREFA DE CÓPIA ÚNICA (Corrigida): 
+    # Copia todo o conteúdo da pasta de origem (código e requirements.txt)
     - name: Copy Application Backend Files (Code and Requirements)
       ansible.builtin.copy:
-        # Corrigido: Sair de 'ansible/', entrar em 'files/', depois em 'backend/'
+        # Caminho: Sai de 'ansible/', entra em 'files/', depois em 'backend/'
         src: ../files/backend/
         dest: "{{ app_dir }}"
         owner: "{{ app_user }}"
@@ -59,15 +58,14 @@
 
     - name: Install Python dependencies (Flask/Gunicorn/Exporter)
       ansible.builtin.pip:
-        requirements: "{{ app_dir }}/requirements.txt"
+        # Agora o requirements.txt estará em /opt/todo_app/requirements.txt
+        requirements: "{{ app_dir }}/requirements.txt" 
         virtualenv: "{{ app_dir }}/{{ venv_name }}"
 
     # 3. Configuração do Systemd
     - name: Set up Systemd Service File using Template
       ansible.builtin.template:
-        # A fonte (src) é o arquivo .j2 dentro da pasta 'ansible/'
         src: todo_app.service.j2 
-        # O destino (dest) é onde o Systemd espera encontrar o arquivo
         dest: /etc/systemd/system/todo_app.service
         owner: root
         group: root
