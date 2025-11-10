@@ -10,7 +10,7 @@ Group={{ app_user }}
 # Diretório de trabalho do projeto: /opt/todo_app
 WorkingDirectory={{ app_dir }}
 
-# O comando que o systemd executará, usando a variável de ponto de entrada corrigida:
+# O comando que o systemd executará. Ele usa o ponto de entrada corrigido: backend.app:app
 # ExecStart=/opt/todo_app/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 backend.app:app
 ExecStart={{ app_dir }}/{{ venv_name }}/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 {{ gunicorn_entry_point }}
 

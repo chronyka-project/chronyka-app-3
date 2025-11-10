@@ -9,7 +9,9 @@
     app_dir: "/opt/todo_app"
     python_version: "python3"
     venv_name: "venv"
-    gunicorn_entry_point: "backend.app:app"
+    # CORREÇÃO CRÍTICA: Gunicorn Entry Point corrigido.
+    # A aplicação está em /opt/todo_app/backend/app.py, então o módulo é backend.app
+    gunicorn_entry_point: "backend.app:app" 
     app_port: '5000' 
 
   tasks:
