@@ -86,6 +86,7 @@
         name: todo_app
         state: restarted
         daemon_reload: yes
+<<<<<<< HEAD
 
 - name: ⚙️ Atualizar Configuração do Prometheus
   hosts: localhost 
@@ -119,3 +120,5 @@
       delegate_to: prometheus_vm
       run_once: true
       ignore_errors: yes
+=======
+>>>>>>> b4e133b11d5c4a26cb978805c809fec98e15be40
