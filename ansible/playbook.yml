@@ -1,6 +1,6 @@
 ---
 - name: Setup ToDo Flask Application
-  hosts: all
+  hosts: aplicacao_vms
   gather_facts: yes
   become: yes
 
@@ -86,3 +86,36 @@
         name: todo_app
         state: restarted
         daemon_reload: yes
+
+- name: ⚙️ Atualizar Configuração do Prometheus
+  hosts: localhost 
+  gather_facts: no
+  vars:
+    # Use 5000, a porta da sua aplicação (exporter)
+    app_exporter_port: 5000 
+    prometheus_sd_path: /etc/prometheus/file_sd/targets.json 
+
+  tasks:
+    - name: 1. Gerar o arquivo targets.json com IPs dinâmicos
+      ansible.builtin.template:
+        src: templates/prometheus_targets.j2
+        dest: /tmp/targets.json
+        # OBS: Se você tiver usado a variável 'node_exporter_port' no template anterior,
+        # substitua por 'app_exporter_port' ou apenas use '5000' fixo no .j2.
+      run_once: true
+
+    - name: 2. Copiar targets.json para o servidor Prometheus
+      ansible.builtin.copy:
+        src: /tmp/targets.json
+        dest: "{{ prometheus_sd_path }}"
+      delegate_to: prometheus_vm 
+      become: yes
+      run_once: true
+
+    - name: 3. Recarregar configuração do Prometheus
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:9090/-/reload"
+        method: POST
+      delegate_to: prometheus_vm
+      run_once: true
+      ignore_errors: yes

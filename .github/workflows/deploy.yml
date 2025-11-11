@@ -3,8 +3,8 @@ name: Deploy App-3 To-Do
 on:
   push:
     branches:
-      - dev
-      - qa
+      # - dev
+      # - qa
       - prod
       
   # Seleção do ambiente em caso de trigger manual
@@ -70,7 +70,7 @@ jobs:
         working-directory: ./terraform/dev
         
       - name: Wait for VM to boot and SSH to be ready
-        run: sleep 120 
+        run: sleep 150 
   
   configure-vm-dev:
     runs-on: self-hosted

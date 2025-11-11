@@ -1,0 +1,12 @@
+[
+  {% for host in groups['aplicacao_vms'] %}
+  {
+    "targets": ["{{ hostvars[host]['ansible_host'] }}:5000"], {# <-- AQUI ESTÁ O IP DINÂMICO #}
+    "labels": {
+      "job": "minha_aplicacao",
+      "instance": "{{ host }}",
+      "ambiente": "producao"
+    }
+  }{{ "," if not loop.last }}
+  {% endfor %}
+]
