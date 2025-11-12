@@ -1,0 +1,31 @@
+services:
+  # --- Serviço de Backend (Flask API) ---
+  backend:
+    build:
+      context: .             # CONTEXTO: A pasta raiz (onde app.py, requirements.txt estão)
+      dockerfile: backend/Dockerfile # O Dockerfile está na subpasta 'backend'
+    volumes:
+      # Mapeamento para desenvolvimento: sincroniza arquivos locais com o container
+      - ./app.py:/usr/src/app/app.py
+      - ./requirements.txt:/usr/src/app/requirements.txt
+    ports:
+      # Mapeia a porta 5000 do container para a porta 5000 do host
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+
+  # --- Serviço de Frontend (Nginx para servir HTML/CSS/JS) ---
+  frontend:
+    build:
+      context: .             # CONTEXTO: A pasta raiz (onde index.html, style.css, script.js estão)
+      dockerfile: frontend/Dockerfile # O Dockerfile está na subpasta 'frontend'
+    volumes:
+      # Mapeamento para desenvolvimento: sincroniza arquivos locais com o container
+      - ./index.html:/usr/share/nginx/html/index.html
+      - ./style.css:/usr/share/nginx/html/style.css
+      - ./script.js:/usr/share/nginx/html/script.js
+    ports:
+      # Mapeia a porta 80 do Nginx para a porta 8080 do host
+      - "8080:80"
+    depends_on:
+      - backend

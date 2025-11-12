@@ -9,7 +9,7 @@ metrics = PrometheusMetrics(app)
 # Configuração do CORS para ambiente local
 # Permite acesso apenas do seu frontend rodando no http-server (porta 8080)
 # e de qualquer host rodando na porta 5000 (como o Postman)
-CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:8080", "http://localhost:8080"]}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Simulação de banco de dados (armazenamento em memória)
 itens = [
