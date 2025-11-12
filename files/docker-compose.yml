@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # O nome do serviço é 'app'
+  app:
+    # Usa o Dockerfile no diretório atual para construir a imagem
+    build: .
+    
+    # Mapeia a porta 8000 interna do container para a porta 8000 do host
+    # Isso é necessário para que o ALB/Ansible consiga se conectar ao Gunicorn
+    ports:
+      - "5000:5000"
+      
+    # Garante que o container reinicie se o processo falhar
+    restart: always
+    
+    # Configurações de logging (opcional, mas bom para produção)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

@@ -1,0 +1,352 @@
+/* style.css */
+:root {
+    --color-primary: #00897b; /* Teal vibrante */
+    --color-secondary: #f0fdf4; /* Verde claro suave */
+    --color-text: #1f2937; /* Cinza escuro */
+    --color-bg: #f9fafb; /* Fundo claro */
+    --color-danger: #ef4444; /* Vermelho para remover */
+    --color-success: #10b981; /* Verde para concluído */
+    --color-muted: #9ca3af; /* Cinza suave para itens concluídos */
+    --color-border: #d1d5db; /* Cor de borda padrão */
+    --color-edit: #1d4ed8; /* Azul para editar */
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+.header {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.header h1 {
+    font-size: 2.5em;
+    font-weight: 800;
+}
+
+.highlight {
+    color: var(--color-secondary);
+    font-weight: 300;
+}
+
+.container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+/* --- Seções e Formulário --- */
+
+.form-section, .list-section {
+    margin-bottom: 40px;
+    background-color: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.add-form label {
+    font-weight: 600;
+    margin-top: 5px;
+}
+
+.add-form input, .add-form textarea {
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.add-form input:focus, .add-form textarea:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.2);
+    outline: none;
+}
+
+.add-form textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    transition: background-color 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.btn-primary:hover {
+    background-color: #00695c;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: #f3f4f6;
+    color: var(--color-text);
+    padding: 12px 20px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.btn-secondary:hover {
+    background-color: #e5e7eb;
+}
+
+/* --- Lista de Itens --- */
+.item-list {
+    display: grid;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.item-card {
+    background-color: var(--color-secondary);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-left: 5px solid var(--color-primary);
+    cursor: default; 
+    transition: border-left-color 0.3s, opacity 0.3s;
+    gap: 15px; 
+}
+
+/* Container para o checkbox e detalhes */
+.item-status-wrapper {
+    display: flex;
+    align-items: flex-start; /* Alinhamento superior para melhor UX */
+    gap: 15px;
+    flex-grow: 1; 
+}
+
+.item-details {
+    flex-grow: 1;
+}
+
+/* ESTILO PARA O CHECKBOX (Visualmente Aprimorado) */
+.completion-checkbox {
+    /* Esconder o checkbox nativo */
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--color-primary);
+    border-radius: 6px;
+    transition: background-color 0.3s, border-color 0.3s;
+    flex-shrink: 0; 
+}
+
+.completion-checkbox:checked {
+    background-color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+/* Adiciona o ícone de 'check' quando concluído */
+.completion-checkbox:checked::after {
+    content: '\f00c'; /* Código do ícone 'check' do Font Awesome */
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    color: white;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+}
+
+/* ESTILO DO CARD CONCLUÍDO */
+.item-card.completed {
+    border-left-color: var(--color-success);
+    opacity: 0.8;
+    background-color: #e6f9f3; 
+}
+
+.item-card.completed .item-details h3,
+.item-card.completed .item-details p {
+    text-decoration: line-through;
+    color: var(--color-muted) !important; 
+}
+
+/* Garante que o badge não fique riscado, mas mude de cor */
+.item-card.completed .badge {
+    text-decoration: none !important;
+}
+
+.item-card h3 {
+    font-size: 1.2em;
+    color: var(--color-text);
+    margin-bottom: 5px;
+}
+
+.item-card p {
+    color: #4b5563;
+    font-size: 0.95em;
+    margin-bottom: 10px;
+}
+
+.item-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* Novo botão de editar */
+.btn-edit {
+    background-color: var(--color-edit);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+    background-color: #1e40af; /* Azul mais escuro */
+}
+
+.btn-delete {
+    background-color: var(--color-danger);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+    background-color: #b91c1c;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+.badge.concluido {
+    background-color: var(--color-success); 
+    color: white;
+}
+
+.badge.pendente {
+    background-color: #fcd34d; /* Amarelo (Warning) */
+    color: #92400e;
+}
+
+/* --- ESTILOS DO MODAL --- */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: none; /* Escondido por padrão */
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.modal-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-50px);
+    transition: transform 0.3s ease-out;
+}
+
+.modal-overlay.active .modal-content {
+    transform: translateY(0);
+}
+
+.modal-content h3 {
+    margin-bottom: 20px;
+    font-size: 1.5em;
+    color: var(--color-primary);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Responsividade (Ajustes para mobile) */
+@media (max-width: 600px) {
+    .header h1 {
+        font-size: 2em;
+    }
+    .item-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .item-actions {
+        margin-top: 15px;
+        justify-content: space-between;
+    }
+    .item-status-wrapper {
+        align-items: flex-start;
+    }
+    .modal-actions {
+        flex-direction: column-reverse;
+    }
+}
