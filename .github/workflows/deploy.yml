@@ -206,47 +206,131 @@ jobs:
         working-directory: ./terraform/dev
 
 #####################################################################
-  # NOVO JOB: PROVISIONAMENTO AWS PROD (Terraform)
+# JOB 1: BUILD & PUSH (Apenas para Prod/PR Prod)
 #####################################################################
-  terraform-prod:
+  build-and-push-image:
+    name: Build & Push Docker Image to ECR
+    # AJUSTE: Roda APENAS em PUSH para 'prod', PR para 'prod', ou Dispatch manual.
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'refs/heads/prod') || 
+      (github.ref == 'refs/heads/prod' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'prod')
     runs-on: ubuntu-latest
-    # Roda em push para 'prod' OU se selecionado manualmente como 'prod'.
-    if: github.ref == 'refs/heads/prod' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'PROD')
     
-    environment:
-      name: PROD
-      # URL de produção.
-      url: http://${{ steps.get-alb-dns.outputs.alb_dns }}
-    
-    outputs:
-      alb_dns: ${{ steps.get-alb-dns.outputs.alb_dns }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      ECR_REPOSITORY: app-todo
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Instala o Terraform no runner
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      # Passo: Verifica se o repositório ECR existe e o cria se não existir
+      - name: Check and Create ECR Repository
+        run: |
+          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_DEFAULT_REGION }} ; then
+            echo "Repositório ECR ${{ env.ECR_REPOSITORY }} não existe. Criando..."
+            aws ecr create-repository \
+              --repository-name ${{ env.ECR_REPOSITORY }} \
+              --image-tag-mutability MUTABLE \
+              --region ${{ env.AWS_DEFAULT_REGION }} \
+              --encryption-configuration encryptionType=AES256
+          else
+            echo "Repositório ECR ${{ env.ECR_REPOSITORY }} já existe."
+          fi
+
+      - name: Set Image Tag and Full URI
+        id: image_info 
+        run: |
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG=$(echo $GITHUB_SHA | cut -c 1-8)
+          FULL_IMAGE_URI="$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "FULL_IMAGE_URI=$FULL_IMAGE_URI" >> $GITHUB_OUTPUT 
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          FULL_IMAGE_URI: ${{ steps.image_info.outputs.FULL_IMAGE_URI }} 
+        working-directory: ./files 
+        run: |
+          docker build -t $FULL_IMAGE_URI .
+          docker tag $FULL_IMAGE_URI ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          docker push $FULL_IMAGE_URI
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          
+    outputs:
+      image_tag: ${{ steps.image_info.outputs.IMAGE_TAG }}
+      full_image_uri: ${{ steps.image_info.outputs.FULL_IMAGE_URI }}
+
+#####################################################################
+  # JOB 2: INFRAESTRUTURA PROD (AWS EC2/Docker) - PASSO FINAL
+  #####################################################################
+  terraform-prod:
+    # Depende apenas do build da imagem
+    needs: [build-and-push-image]
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'refs/heads/prod') || 
+      (github.ref == 'refs/heads/prod' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'prod')
+    runs-on: ubuntu-latest
+    environment:
+      name: PROD
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          # Define a versão do Terraform que você deseja usar (ex: 1.8.x)
-          terraform_version: 1.8.0 
 
       - name: Terraform Init (PROD AWS)
-        id: init
-        # Agora o comando é apenas 'terraform init'
         run: terraform init
         working-directory: ./terraform/prod
 
-      - name: Terraform Apply (PROD AWS)
-        # Agora o comando é apenas 'terraform apply'
-        run: terraform apply -auto-approve
+      - name: Terraform Plan (PROD AWS - PR/Dispatch)
+        id: plan-prod
+        # Salva o plano apenas para PRs ou Dispatch (para revisão antes da aplicação).
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        run: terraform plan -input=false -out=tfplan
         working-directory: ./terraform/prod
+        continue-on-error: true 
 
-      - name: Get ALB DNS Name
-        id: get-alb-dns
-        # Agora o comando é apenas 'terraform output'
-        run: echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+      - name: Terraform Apply (PROD AWS - Dispatch com Plan Salvo)
+        # Aplica o plano salvo (tfplan) APENAS se for um deploy manual (Dispatch).
+        if: github.event_name == 'workflow_dispatch' && steps.plan-prod.outcome == 'success'
+        run: terraform apply -auto-approve tfplan
+        working-directory: ./terraform/prod
+  
+      - name: Terraform Apply (PROD AWS - Direct Push/Merge)
+        # Aplica as mudanças DIRETAMENTE (sem usar tfplan) se for um PUSH para a branch PROD (que ocorre após o merge do PR).
+        # Este passo fará o deploy forçado:
+        # 1. Ele destrói o antigo ECS Service (se estiver sendo feito pela primeira vez).
+        # 2. Ele garante que a Launch Template seja atualizada (se houver alteração)
+        # 3. Ele força o Auto Scaling Group (ASG) a recriar as instâncias EC2, 
+        #    que puxarão a nova imagem do Docker (se a imagem tiver sido atualizada no ECR).
+        if: github.ref == 'refs/heads/prod' && github.event_name == 'push'
+        run: terraform apply -auto-approve
         working-directory: ./terraform/prod
 
 #####################################################################
