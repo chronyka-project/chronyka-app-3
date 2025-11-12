@@ -176,7 +176,7 @@ jobs:
           chmod 600 /tmp/ansible_key
           
       - name: Run Ansible Playbook to Setup Flask (QA)
-        run: ansible-playbook -i ${{ needs.terraform-qa.outputs.new_vm_ip_qa }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
+        run: ansible-playbook -i ${{ needs.terraform-qa.outputs.new_vm_ip_qa }}, ansible/playbook-qa.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
 
 #####################################################################
 # JOB: DESTRUIR AMBIENTE DEV APÓS SUCESSO NO QA

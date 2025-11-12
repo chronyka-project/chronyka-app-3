@@ -1,14 +1,23 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from prometheus_flask_exporter import PrometheusMetrics
+# NOVO: Importa WhiteNoise
+from whitenoise import WhiteNoise 
 
 app = Flask(__name__)
 
+# --- CONFIGURAÇÃO WHITENOISE (SERVE O FRONTEND) ---
+# WhiteNoise configura o servidor Flask/Gunicorn para servir arquivos estáticos.
+# root='.' significa que ele vai procurar arquivos estáticos no diretório raiz do projeto (onde app.py está).
+# index_file=True garante que, ao acessar '/', ele serve o 'index.html'.
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='.', index_file=True, prefix='/')
+
+
 metrics = PrometheusMetrics(app)
 
-# Configuração do CORS para ambiente local
-# Permite acesso apenas do seu frontend rodando no http-server (porta 8080)
-# e de qualquer host rodando na porta 5000 (como o Postman)
+# Configuração do CORS para ambiente local e de produção
+# Permitimos qualquer origem (*) no deploy Docker para simplificar a configuração de rede,
+# já que tudo está na mesma máquina/porta (80).
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Simulação de banco de dados (armazenamento em memória)
@@ -23,6 +32,7 @@ def find_item(item_id):
     return next((item for item in itens if item["id"] == item_id), None)
 
 # Rota GET - Listar todos os itens
+# Esta é uma rota de API
 @app.route('/itens', methods=['GET'])
 def get_itens():
     return jsonify(itens)
@@ -103,12 +113,12 @@ def delete_item(item_id):
         
     return jsonify({"message": "Item deleted"}), 200
 
+# Rota de Health Check para o ALB
 @app.route("/health")
 def health():
     return "ok", 200
 
 
 if __name__ == '__main__':
-    # Rodar no localhost (127.0.0.1) na porta 5000
-    # O debug=True é ideal para desenvolvimento local
+    # Esta parte é para rodar localmente e é ignorada pelo Gunicorn
     app.run(host='127.0.0.1', port=5000, debug=True)

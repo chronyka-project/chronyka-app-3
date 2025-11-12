@@ -1,5 +1,5 @@
 ---
-- name: Deploy Todo Application (Flask API + Nginx Frontend) with Docker Compose
+- name: Deploy Todo App and Run Automated Tests on QA Environment
   hosts: all
   become: yes # Permissão de root para instalação e gerenciamento de serviços
 
@@ -7,27 +7,24 @@
     - name: Gathering Facts
       ansible.builtin.setup:
 
-    - name: Ensure Python and UFW are installed
+    - name: Ensure Python, UFW, and DNS Utilities are installed
       ansible.builtin.package:
         name: 
           - python3
+          - python3-pip # Necessário para instalar dependências de teste
           - ufw
           - dnsutils
         state: present
 
-    - name: Configure UFW to allow SSH (port 22)
+    - name: Configure UFW to allow SSH (port 22) and Application Access (port 5000)
       community.general.ufw:
         rule: allow
-        port: '22'
+        port: '{{ item }}'
         proto: tcp
         state: enabled
-        
-    - name: Configure UFW to allow access to Frontend Nginx (port 5000)
-      community.general.ufw:
-        rule: allow
-        port: '5000'
-        proto: tcp
-        state: enabled
+      loop:
+        - '22'
+        - '5000'
 
     # --- 1. INSTALAÇÃO DO DOCKER ENGINE (Sem alterações) ---
     - name: Install required packages for Docker
@@ -82,11 +79,10 @@
       ansible.builtin.pause:
         seconds: 10
 
-    # --- 4. DEPLOY DA APLICAÇÃO TODO APP (Alterações aqui) ---
+    # --- 4. DEPLOY DA APLICAÇÃO TODO APP (Caminhos atualizados) ---
     - name: Create application directory for Todo App
       ansible.builtin.file:
-        # Diretório alterado para refletir o nome da aplicação
-        path: /home/dev/app/todo-app 
+        path: /home/dev/app/todo-app # Caminho atualizado
         state: directory
         owner: dev
         group: dev
@@ -94,34 +90,67 @@
         
     - name: Copy Todo App files (including Dockerfiles and compose)
       ansible.builtin.copy:
-        # Assume que todos os arquivos (Dockerfiles, compose, app.py, index.html, etc.) estão em ../files/
+        # ATENÇÃO: Ajuste este caminho 'src' para o local onde os seus arquivos de deploy estão no host
         src: ../files/ 
-        # Destino alterado
-        dest: /home/dev/app/todo-app 
+        dest: /home/dev/app/todo-app # Caminho atualizado
         owner: dev
         group: dev
         mode: '0755'
 
-    # --- TAREFAS DE DEBUG ---
-    - name: DEBUG - List files in deployment directory (as 'dev' user)
-      ansible.builtin.command: ls -la /home/dev/app/todo-app
-      args:
-        chdir: /home/dev/app/todo-app
-      become: yes
-      become_user: dev
-      register: deploy_dir_contents
-      changed_when: false
-
-    - name: DEBUG - Print deployment directory contents
-      ansible.builtin.debug:
-        var: deploy_dir_contents.stdout_lines
-
-    - name: Run Docker Compose up (Build and Start services)
+    - name: Run Docker Compose up to start the services
       ansible.builtin.command: /usr/local/bin/docker-compose up -d --build
       args:
-        # Diretório de execução alterado
-        chdir: /home/dev/app/todo-app 
+        chdir: /home/dev/app/todo-app # Caminho atualizado
       become: yes
       become_user: dev
       environment:
         DOCKER_HOST: unix:///var/run/docker.sock
+
+    # --- 5. EXECUÇÃO DOS TESTES AUTOMATIZADOS (Porta de espera atualizada) ---
+    - name: Create directory for test scripts
+      ansible.builtin.file:
+        path: /home/dev/app/qa-tests
+        state: directory
+        owner: dev
+        group: dev
+        mode: '0755'
+
+    - name: Copy test scripts and requirements.txt (e.g., pytest, selenium)
+      ansible.builtin.copy:
+        # ATENÇÃO: Ajuste este caminho 'src' para o local onde os seus arquivos de teste estão no host
+        src: ../files/qa-tests/ 
+        dest: /home/dev/app/qa-tests
+        owner: dev
+        group: dev
+        mode: '0755'
+
+    - name: Install Python test dependencies
+      ansible.builtin.pip:
+        requirements: /home/dev/app/qa-tests/requirements.txt
+        executable: pip3
+      become: yes
+      become_user: dev
+
+    - name: Wait for Frontend (Nginx) to be fully ready before running tests
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 5000 
+        timeout: 60
+        state: started
+
+    - name: Run Automated Tests
+      ansible.builtin.command: python3 -m pytest # Ou o comando específico da sua suíte de testes
+      args:
+        chdir: /home/dev/app/qa-tests
+      become: yes
+      become_user: dev
+      register: test_results
+
+    - name: Display Test Results
+      ansible.builtin.debug:
+        var: test_results.stdout_lines
+        
+    - name: Fail the Ansible playbook if tests failed
+      ansible.builtin.fail:
+        msg: "Automated tests failed. Check the results above."
+      when: test_results.rc != 0

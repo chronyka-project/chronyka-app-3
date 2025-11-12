@@ -1,6 +1,6 @@
-// IMPORTANTE: AGORA VOCÊ ESTÁ USANDO O LOCALHOST (SUA MÁQUINA)
-// O Flask está rodando na porta 5000.
-const API_URL = 'http://127.0.0.1:5000/itens'; 
+// IMPORTANTE: AGORA QUE O FRONTEND E O BACKEND ESTÃO NA MESMA PORTA (80 DO HOST),
+// USAMOS UMA ROTA RELATIVA PARA EVITAR ERROS DE CORS E SIMPLIFICAR.
+const API_URL = '/itens'; 
 
 const itemListContainer = document.getElementById('item-list');
 const form = document.getElementById('add-item-form');
@@ -17,7 +17,6 @@ const closeModalBtn = document.getElementById('close-modal-btn');
 
 
 // --- FUNÇÕES DE CONTROLE DO MODAL ---
-
 /**
  * Exibe o modal de edição com os dados da tarefa preenchidos.
  * @param {Object} item - O objeto de item da API.
@@ -39,121 +38,131 @@ function closeEditModal() {
     editModal.classList.remove('active');
 }
 
-// Listeners para fechar o modal
+// Listener para fechar o modal
 closeModalBtn.addEventListener('click', closeEditModal);
+// Listener para fechar o modal clicando fora
 editModal.addEventListener('click', (e) => {
-    // Fecha se clicar no overlay (fundo escuro), mas não no conteúdo do modal
-    if (e.target.id === 'edit-modal') {
+    if (e.target === editModal) {
         closeEditModal();
     }
 });
 
 
-// --- RENDERIZAÇÃO E GET DE ITENS ---
+// --- FUNÇÕES DE INTERAÇÃO COM A API ---
 
 /**
- * Cria o elemento HTML para um único item da lista, incluindo o checkbox e o botão editar.
- * @param {Object} item - O objeto de item da API.
- */
-function createCard(item) {
-    const card = document.createElement('div');
-    card.className = `item-card ${item.concluido ? 'completed' : ''}`;
-    card.setAttribute('data-id', item.id);
-
-    const statusClass = item.concluido ? 'concluido' : 'pendente';
-    const statusText = item.concluido ? 'Concluído' : 'Pendente';
-
-    card.innerHTML = `
-        <div class="item-status-wrapper">
-            <!-- CHECKBOX DE CONCLUSÃO -->
-            <input type="checkbox" class="completion-checkbox" data-id="${item.id}" ${item.concluido ? 'checked' : ''}>
-
-            <div class="item-details">
-                <h3>${item.titulo}</h3>
-                <p>${item.descricao || 'Nenhuma descrição fornecida.'}</p>
-                <span class="badge ${statusClass}">${statusText}</span>
-            </div>
-        </div>
-        
-        <div class="item-actions">
-            <!-- NOVO BOTÃO DE EDIÇÃO -->
-            <button class="btn-edit" data-id="${item.id}" data-titulo="${item.titulo}" data-descricao="${item.descricao || ''}">
-                <i class="fas fa-edit"></i> Editar
-            </button>
-            <button class="btn-delete" data-id="${item.id}">
-                <i class="fas fa-trash-alt"></i> Remover
-            </button>
-        </div>
-    `;
-    
-    // 1. Listener de remoção ao botão DELETE
-    card.querySelector('.btn-delete').addEventListener('click', (e) => {
-        e.stopPropagation(); 
-        deleteItem(item.id);
-    });
-
-    // 2. Listener de clique ao CHECKBOX para conclusão/pendente
-    const checkbox = card.querySelector('.completion-checkbox');
-    checkbox.addEventListener('change', () => {
-        toggleCompletion(item.id, checkbox.checked, card);
-    });
-    
-    // 3. NOVO: Listener de clique ao botão EDITAR para abrir o modal
-    card.querySelector('.btn-edit').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openEditModal(item);
-    });
-
-
-    return card;
-}
-
-/**
- * Busca todos os itens da API e renderiza-os na tela.
+ * Faz a chamada GET para a API e renderiza os itens.
  */
 async function fetchAndRenderItems() {
-    itemListContainer.innerHTML = '<p class="loading-message">Carregando itens...</p>';
-
     try {
+        itemListContainer.innerHTML = '<p class="loading-message">Carregando itens...</p>';
         const response = await fetch(API_URL);
         
         if (!response.ok) {
-            throw new Error(`Erro de rede: ${response.status} ${response.statusText}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const items = await response.json();
+        
+        // --- CORREÇÃO: INVERTE A ORDEM PARA MOSTRAR MAIS NOVOS NO TOPO ---
+        // Cria uma cópia da array e a inverte para que os itens mais recentes (IDs maiores) apareçam primeiro.
+        const reversedItems = [...items].reverse();
 
-        const itens = await response.json();
-
-        itemListContainer.innerHTML = '';
-        if (itens.length === 0) {
-            itemListContainer.innerHTML = '<p class="empty-message">Nenhuma tarefa encontrada. Adicione uma nova!</p>';
-        } else {
-            // Renderiza os itens do mais novo para o mais antigo (id decrescente)
-            itens.reverse().forEach(item => {
-                itemListContainer.appendChild(createCard(item));
-            });
-        }
-
+        renderItems(reversedItems); // Usa a lista invertida
+        
     } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-        itemListContainer.innerHTML = `<p class="error-message">
-            Erro ao carregar dados: ${error.message}. 
-            Verifique se o **servidor Flask** está rodando na porta 5000.
-        </p>`;
+        console.error("Erro ao buscar itens:", error);
+        itemListContainer.innerHTML = `<p class="error-message">Falha ao carregar tarefas: ${error.message}</p>`;
     }
 }
 
-// --- ADIÇÃO DE ITEM (POST) ---
+/**
+ * Renderiza a lista de itens no HTML.
+ * @param {Array<Object>} items - A lista de tarefas.
+ */
+function renderItems(items) {
+    itemListContainer.innerHTML = '';
+    
+    if (items.length === 0) {
+        itemListContainer.innerHTML = '<p class="loading-message">Nenhuma tarefa encontrada. Adicione uma nova!</p>';
+        return;
+    }
+    
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = `item-card ${item.concluido ? 'completed' : ''}`;
+        card.dataset.itemId = item.id;
+        
+        const badgeClass = item.concluido ? 'concluido' : 'pendente';
+        const badgeText = item.concluido ? 'Concluído' : 'Pendente';
+        
+        // Elementos internos do Card
+        card.innerHTML = `
+            <div class="item-header">
+                <input type="checkbox" class="completion-checkbox" ${item.concluido ? 'checked' : ''} id="checkbox-${item.id}">
+                <h3 class="item-title">${item.titulo}</h3>
+                <span class="badge ${badgeClass}">${badgeText}</span>
+            </div>
+            <p class="item-description">${item.descricao || 'Sem descrição.'}</p>
+            <div class="item-actions">
+                <button class="btn-icon btn-edit" data-item-id="${item.id}">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="btn-icon btn-delete" data-item-id="${item.id}">
+                    <i class="fas fa-trash-alt"></i> Remover
+                </button>
+            </div>
+        `;
+        
+        // Adiciona Listeners no Card Renderizado
+        
+        // 1. Listener do Checkbox (PATCH)
+        const checkbox = card.querySelector('.completion-checkbox');
+        checkbox.addEventListener('change', (e) => {
+            const isCompleted = e.target.checked;
+            updateItemStatus(item.id, isCompleted, card);
+        });
+
+        // 2. Listener do Botão de Edição (PUT)
+        const editBtn = card.querySelector('.btn-edit');
+        editBtn.addEventListener('click', () => {
+            // Busca o item completo antes de abrir o modal (para ter certeza dos dados)
+            openEditModal({
+                id: item.id,
+                titulo: item.titulo,
+                descricao: item.descricao,
+                concluido: item.concluido
+            });
+        });
+
+        // 3. Listener do Botão de Remoção (DELETE)
+        const deleteBtn = card.querySelector('.btn-delete');
+        deleteBtn.addEventListener('click', () => {
+             // Usamos um modal customizado ou confirmação em tela em vez de alert/confirm.
+             // Por simplificação aqui, vamos direto.
+             deleteItem(item.id, card);
+        });
+
+        itemListContainer.appendChild(card);
+    });
+}
 
 /**
- * Envia um novo item para a API via POST.
+ * Adiciona um novo item (POST).
  */
 async function addItem(e) {
-    e.preventDefault(); 
-
+    e.preventDefault();
+    
     const titulo = tituloInput.value.trim();
     const descricao = descricaoInput.value.trim();
-
+    
     if (!titulo) return;
+    
+    const payload = {
+        titulo: titulo,
+        descricao: descricao,
+        concluido: false
+    };
 
     try {
         const response = await fetch(API_URL, {
@@ -161,100 +170,94 @@ async function addItem(e) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                titulo: titulo,
-                descricao: descricao,
-                concluido: false 
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
             throw new Error(`Falha ao adicionar: ${response.statusText}`);
         }
 
-        // Limpa o formulário e recarrega a lista para mostrar o novo item
+        // Limpa o formulário e recarrega a lista
         tituloInput.value = '';
         descricaoInput.value = '';
-        await fetchAndRenderItems(); 
-
+        await fetchAndRenderItems();
+        
     } catch (error) {
         console.error("Erro ao adicionar item:", error);
         alert(`Erro ao adicionar item: ${error.message}`);
     }
 }
 
-
-// --- EDIÇÃO DE ITEM (PATCH) ---
-
 /**
- * Envia alterações de um item para a API via PATCH.
+ * Edita um item existente (PUT) via modal.
  */
 async function editItem(e) {
-    e.preventDefault(); 
+    e.preventDefault();
     
-    const id = editIdInput.value;
+    const id = parseInt(editIdInput.value);
     const titulo = editTituloInput.value.trim();
     const descricao = editDescricaoInput.value.trim();
+    
+    if (!titulo || isNaN(id)) return;
 
-    if (!titulo || !id) return;
+    const currentCard = document.querySelector(`.item-card[data-item-id="${id}"]`);
+    const isCompleted = currentCard ? currentCard.classList.contains('completed') : false;
+
+    const payload = {
+        titulo: titulo,
+        descricao: descricao,
+        concluido: isCompleted // Mantém o status de conclusão atual
+    };
 
     try {
         const response = await fetch(`${API_URL}/${id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                titulo: titulo,
-                descricao: descricao
-                // Note: Não enviamos 'concluido' aqui, pois ele é tratado pelo checkbox
-            })
+            body: JSON.stringify(payload)
         });
-
+        
         if (!response.ok) {
-            throw new Error(`Falha ao editar: ${response.statusText}`);
+            throw new Error(`Falha ao salvar: ${response.statusText}`);
         }
 
-        // Fecha o modal e recarrega a lista para mostrar as alterações
+        // Fecha o modal e recarrega a lista para mostrar a alteração
         closeEditModal();
-        await fetchAndRenderItems(); 
-
+        await fetchAndRenderItems();
+        
     } catch (error) {
-        console.error("Erro ao editar item:", error);
-        alert(`Erro ao editar item: ${error.message}`);
+        console.error("Erro ao salvar edição:", error);
+        alert(`Erro ao salvar edição: ${error.message}`);
     }
 }
 
 
-// --- REMOÇÃO DE ITEM (DELETE) ---
-
 /**
- * Remove um item da API via DELETE.
- * @param {number} id - ID do item a ser removido.
+ * Remove um item (DELETE).
  */
-async function deleteItem(id) {
-    if (!window.confirm(`Tem certeza que deseja remover a tarefa com ID ${id}?`)) {
-        return;
-    }
+async function deleteItem(id, cardElement) {
+    
+    // Confirmação simples via console, idealmente seria um modal
+    console.log(`Tentando deletar item ${id}...`);
 
     try {
         const response = await fetch(`${API_URL}/${id}`, {
             method: 'DELETE'
         });
-
+        
         if (!response.ok) {
             throw new Error(`Falha ao remover: ${response.statusText}`);
         }
 
-        const cardToRemove = itemListContainer.querySelector(`[data-id="${id}"]`);
-        if (cardToRemove) {
-            cardToRemove.remove();
+        // Remove o card do DOM sem recarregar toda a lista
+        cardElement.remove();
+        
+        // Verifica se a lista ficou vazia
+        if (itemListContainer.children.length === 0) {
+            fetchAndRenderItems();
         }
         
-        if (itemListContainer.children.length === 0) {
-            itemListContainer.innerHTML = '<p class="empty-message">Nenhuma tarefa encontrada. Adicione uma nova!</p>';
-        }
-
     } catch (error) {
         console.error("Erro ao remover item:", error);
         alert(`Erro ao remover item: ${error.message}`);
@@ -262,22 +265,25 @@ async function deleteItem(id) {
 }
 
 
-// --- TOGGLE CONCLUSÃO (PATCH) ---
-
 /**
- * Alterna o status de conclusão de um item (PATCH).
- * @param {number} id - ID do item a ser atualizado.
- * @param {boolean} newStatus - O novo status (true para concluído, false para pendente).
- * @param {HTMLElement} cardElement - O elemento HTML do cartão para atualização visual.
+ * Atualiza o status de conclusão de um item (PATCH).
+ * @param {number} id - ID do item.
+ * @param {boolean} isCompleted - Novo status de conclusão.
+ * @param {HTMLElement} cardElement - O elemento DOM do card.
  */
-async function toggleCompletion(id, newStatus, cardElement) {
+async function updateItemStatus(id, isCompleted, cardElement) {
+    
+    const payload = {
+        concluido: isCompleted
+    };
+
     try {
         const response = await fetch(`${API_URL}/${id}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ concluido: newStatus })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {

@@ -1,16 +1,19 @@
-# Variáveis
-# ==============================================================================
-variable "app_name" {
-  description = "Nome da Aplicação e do ambiente"
-  default     = "todo-prod"
+# Variáveis de Configuração
+
+variable "region" {
+  description = "Região AWS para implantação."
+  type        = string
+  default     = "us-east-1"
 }
 
-variable "ami_id" {
-  description = "ID da AMI personalizada pronta"
-  default     = "ami-0d49d937cd969fb11"
+variable "app_name_todo" {
+  description = "Nome base da aplicação todo (usado para tags e nomes de recursos)."
+  type        = string
+  default     = "app-todo"
 }
 
-variable "key_name" {
-  description = "Nome da sua Key Pair da AWS para SSH/Ansible"
-  default     = "flask-key"
+variable "container_port" {
+  description = "Porta que o container todo expõe (interna)."
+  type        = number
+  default     = 5000
 }

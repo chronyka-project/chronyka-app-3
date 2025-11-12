@@ -1,31 +1,22 @@
-services:
-  # --- Serviço de Backend (Flask API) ---
-  backend:
-    build:
-      context: .             # CONTEXTO: A pasta raiz (onde app.py, requirements.txt estão)
-      dockerfile: backend/Dockerfile # O Dockerfile está na subpasta 'backend'
-    volumes:
-      # Mapeamento para desenvolvimento: sincroniza arquivos locais com o container
-      - ./app.py:/usr/src/app/app.py
-      - ./requirements.txt:/usr/src/app/requirements.txt
-    ports:
-      # Mapeia a porta 5000 do container para a porta 5000 do host
-      - "5000:5000"
-    environment:
-      - FLASK_ENV=production
+version: '3.8'
 
-  # --- Serviço de Frontend (Nginx para servir HTML/CSS/JS) ---
-  frontend:
-    build:
-      context: .             # CONTEXTO: A pasta raiz (onde index.html, style.css, script.js estão)
-      dockerfile: frontend/Dockerfile # O Dockerfile está na subpasta 'frontend'
-    volumes:
-      # Mapeamento para desenvolvimento: sincroniza arquivos locais com o container
-      - ./index.html:/usr/share/nginx/html/index.html
-      - ./style.css:/usr/share/nginx/html/style.css
-      - ./script.js:/usr/share/nginx/html/script.js
+services:
+  # O nome do serviço é 'app'
+  app:
+    # Usa o Dockerfile no diretório atual para construir a imagem
+    build: .
+    
+    # Mapeia a porta 8000 interna do container para a porta 8000 do host
+    # Isso é necessário para que o ALB/Ansible consiga se conectar ao Gunicorn
     ports:
-      # Mapeia a porta 80 do Nginx para a porta 8080 do host
-      - "8080:80"
-    depends_on:
-      - backend
+      - "5000:5000"
+      
+    # Garante que o container reinicie se o processo falhar
+    restart: always
+    
+    # Configurações de logging (opcional, mas bom para produção)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
