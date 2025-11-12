@@ -125,3 +125,4 @@
       become_user: dev
       environment:
         DOCKER_HOST: unix:///var/run/docker.sock
+        DOCKER_API_VERSION: "1.44"
