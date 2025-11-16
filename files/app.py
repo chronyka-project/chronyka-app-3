@@ -13,7 +13,7 @@ app = Flask(__name__)
 app.wsgi_app = WhiteNoise(app.wsgi_app, root='.', index_file=True, prefix='/')
 
 
-metrics = PrometheusMetrics(app)
+metrics = PrometheusMetrics(app, in_progress=True)
 
 # Configuração do CORS para ambiente local e de produção
 # Permitimos qualquer origem (*) no deploy Docker para simplificar a configuração de rede,

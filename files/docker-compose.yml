@@ -10,6 +10,10 @@ services:
     # Isso é necessário para que o ALB/Ansible consiga se conectar ao Gunicorn
     ports:
       - "5000:5000"
+      - "9090:5000" # Mapeamento para o exporter
+    
+    environment:
+      PROMETHEUS_FLASK_EXPORTER_PORT: 9090
       
     # Garante que o container reinicie se o processo falhar
     restart: always

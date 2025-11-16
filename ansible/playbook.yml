@@ -7,6 +7,20 @@
     - name: Gathering Facts
       ansible.builtin.setup:
 
+    - name: Configure apt to prefer IPv4
+      ansible.builtin.lineinfile:
+        path: /etc/apt/apt.conf.d/99force-ipv4
+        create: yes
+        line: 'Acquire::ForceIPv4 "true";'
+        state: present
+      when: ansible_os_family == "Debian" # Aplica apenas em VMs Debian/Ubuntu
+
+    - name: Update apt cache # <--- NOVO: FORÇA A ATUALIZAÇÃO DO CACHE
+      ansible.builtin.apt:
+        update_cache: yes
+        # Se for um ambiente Debian/Ubuntu, use esta condição
+      when: ansible_os_family == "Debian"
+
     - name: Ensure Python and UFW are installed
       ansible.builtin.package:
         name: 
@@ -15,19 +29,30 @@
           - dnsutils
         state: present
 
-    - name: Configure UFW to allow SSH (port 22)
+    - name: Configure UFW to allow SSH (port 22) and app access (5000 / 9090 / 9100)
       community.general.ufw:
         rule: allow
-        port: '22'
+        port: '{{ item }}'
         proto: tcp
         state: enabled
-        
-    - name: Configure UFW to allow access to Frontend Nginx (port 5000)
-      community.general.ufw:
-        rule: allow
-        port: '5000'
-        proto: tcp
-        state: enabled
+      loop:
+        - '22'
+        - '5000'
+        - '9090'
+        - '9100'
+
+    # Instalação do Node-exporter
+    - name: Install Node Exporter package (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: prometheus-node-exporter
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure Node Exporter service is running and enabled
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: started
+        enabled: yes
 
     # --- 1. INSTALAÇÃO DO DOCKER ENGINE (Sem alterações) ---
     - name: Install required packages for Docker

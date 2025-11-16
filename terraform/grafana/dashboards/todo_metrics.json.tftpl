@@ -1,0 +1,176 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "title": "Dashboard Completo ToDo/VM - Ambiente ${environment}",
+  "uid": "todo-app-${environment}",
+  "panels": [
+    // ====================================================================================================
+    // 1. LINHA: MÉTRICAS DE APLICAÇÃO (GOLDEN SIGNALS)
+    // ====================================================================================================
+    {
+      "title": "Taxa de Requisições Total (Req/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m]))",
+          "legendFormat": "Total",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Taxa de Erros HTTP (5xx)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(flask_http_requests_total{job=\"app-todo-${environment}\", code=~\"5..\"}[5m]))",
+          "legendFormat": "Erros 5xx",
+          "refId": "A"
+        }
+      ],
+      "unit": "reqs/sec"
+    },
+    {
+      "title": "Latência da Requisição (p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{job=\"app-todo-${environment}\"}[5m])) by (le))",
+          "legendFormat": "p95 Latency",
+          "refId": "A"
+        }
+      ],
+      "unit": "s"
+    },
+    // ====================================================================================================
+    // 2. LINHA: DETALHE DE REQUISIÇÕES
+    // ====================================================================================================
+    {
+      "title": "Requisições por Status Code (5m)",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m]))",
+          "legendFormat": "{{code}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Requisições por Endpoint (Top 10)",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (path) (rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m])))",
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    // ====================================================================================================
+    // 3. LINHA: MÉTRICAS DE SISTEMA (VM)
+    // ====================================================================================================
+    {
+      "title": "Uso de CPU do Host (%)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", instance=\"vm-${environment}\"}[5m])) * 100)",
+          "legendFormat": "CPU Utilizada",
+          "refId": "A"
+        }
+      ],
+      "unit": "percent"
+    },
+    {
+      "title": "Uso de Memória do Host (%)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{instance=\"vm-${environment}\"} / node_memory_MemTotal_bytes{instance=\"vm-${environment}\"}))",
+          "legendFormat": "Memória Utilizada",
+          "refId": "A"
+        }
+      ],
+      "unit": "percent"
+    },
+    // ====================================================================================================
+    // 4. LINHA: DISCO E REDE
+    // ====================================================================================================
+    {
+      "title": "I/O de Disco (Bytes/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "rate(node_disk_bytes_read_total{instance=\"vm-${environment}\"}[5m])",
+          "legendFormat": "Leitura",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_disk_bytes_written_total{instance=\"vm-${environment}\"}[5m])",
+          "legendFormat": "Escrita",
+          "refId": "B"
+        }
+      ],
+      "unit": "bytes/sec"
+    },
+    {
+      "title": "Tráfego de Rede (Bytes/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(node_network_receive_bytes_total{instance=\"vm-${environment}\", device!=\"lo\"}[5m]))",
+          "legendFormat": "Recebido (Rx)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(node_network_transmit_bytes_total{instance=\"vm-${environment}\", device!=\"lo\"}[5m]))",
+          "legendFormat": "Transmitido (Tx)",
+          "refId": "B"
+        }
+      ],
+      "unit": "bytes/sec"
+    }
+  ],
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [
+    "flask",
+    "application",
+    "host",
+    "complete",
+    "${environment}"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "uid": "todo-app-${environment}",
+  "version": 1
+}

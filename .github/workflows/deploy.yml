@@ -42,8 +42,6 @@ jobs:
     environment:
       name: DEV
 
-    # O bloco 'env' foi removido aqui, pois as variáveis Terraform/AWS são globais.
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -69,16 +67,17 @@ jobs:
         run: echo "new_vm_ip=$(/usr/local/bin/terraform output -raw new_vm_ip)" >> $GITHUB_OUTPUT
         working-directory: ./terraform/dev
         
-      - name: Wait for VM to boot and SSH to be ready
-        run: sleep 150 
+      # - name: Wait for VM to boot and SSH to be ready
+      #  run: sleep 150 
   
   configure-vm-dev:
     runs-on: self-hosted
     needs: [terraform-dev]
     if: always() && needs.terraform-dev.result == 'success'
+    outputs:
+      new_vm_ip: ${{ needs.terraform-dev.outputs.new_vm_ip }}
     environment:
       name: DEV
-      # URL para ser visualizada no GHA
       url: http://${{ needs.terraform-dev.outputs.new_vm_ip }}:5000
       
     # Variáveis de Conexão do Ansible movidas para o nível do JOB
@@ -112,20 +111,120 @@ jobs:
         # Usando as variáveis globais do Ansible definidas no 'env' do job
         run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
 
+  update-haproxy-config-dev:
+    runs-on: self-hosted
+    needs: [configure-vm-dev] # Assumindo que você renomeou o job de configuração
+    if: always() && needs.configure-vm-dev.result == 'success'
+    environment:
+      name: DEV
+
+    env:
+      # Use um Secret para o IP do seu Load Balancer HAProxy
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      ANSIBLE_USER: "dev" # Usuário com acesso ao HAProxy
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update HAProxy Config
+        # Use o pipe para iniciar o bloco de comando multi-linha
+        run: | 
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/haproxy_config.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip=${{ needs.configure-vm-dev.outputs.new_vm_ip }}" \
+            -e "backend_name=app_servers_todo_dev" \
+            -e "app_port=5000"
+
+# --- NOVO JOB: Atualizar o Prometheus Targets para o ambiente DEV ---
+  update-prometheus-targets-dev:
+    runs-on: self-hosted
+    # Este job só deve rodar após o deploy e configuração da nova VM DEV
+    needs: [configure-vm-dev] 
+    if: always() && needs.configure-vm-dev.result == 'success'
+    environment:
+      name: DEV
+
+    env:
+      # Use uma variável de ambiente ou secret para o IP do seu servidor Prometheus
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      ANSIBLE_USER: "dev" # Ex: ansible_user ou um usuário dedicado
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          # Reutiliza a chave SSH. Se o usuário for diferente, pode ser necessária outra chave.
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update Prometheus Targets
+        # Executa um playbook específico no HOST do Prometheus, passando o IP da nova VM
+        run: | 
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip=${{ needs.configure-vm-dev.outputs.new_vm_ip }}" \
+            -e "environment_name=dev" \
+            -e "app_name=todo"
+        
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+  
+  update-grafana-dashboard-dev:
+    runs-on: self-hosted
+    # Depende da atualização do Prometheus
+    needs: [configure-vm-dev, update-prometheus-targets-dev] 
+    if: always() && needs.update-prometheus-targets-dev.result == 'success'
+    environment:
+      name: DEV
+      
+    env:
+      # Use o IP da VM de Monitoramento (Grafana/Prometheus)
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }} 
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init (Grafana)
+        run: |
+          terraform init \
+            -backend-config="key=app-3/dev/terraform.tfstate"
+        working-directory: ./terraform/grafana
+
+      - name: Terraform Apply (Grafana Dashboard)
+        run: | 
+          terraform apply -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=dev"
+        working-directory: ./terraform/grafana
 
 #####################################################################
 # JOB PARA PROVISIONAMENTO E CONFIGURAÇÃO DE QA
 #####################################################################
   terraform-qa:
-    # Roda apenas em push para a branch QA ou se selecionado manualmente como QA
     if: github.ref == 'refs/heads/qa' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'QA')
     
     runs-on: self-hosted
     environment:
       name: QA
       
-    # O bloco 'env' foi removido aqui, pois as variáveis Terraform/AWS são globais.
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -143,8 +242,8 @@ jobs:
         run: echo "new_vm_ip_qa=$(/usr/local/bin/terraform output -raw new_vm_ip)" >> $GITHUB_OUTPUT
         working-directory: ./terraform/qa
         
-      - name: Wait for VM to boot and SSH to be ready
-        run: sleep 120
+      # - name: Wait for VM to boot and SSH to be ready
+      #  run: sleep 120
 
     outputs:
       new_vm_ip_qa: ${{ steps.get-ip-qa.outputs.new_vm_ip_qa }}
@@ -177,6 +276,105 @@ jobs:
           
       - name: Run Ansible Playbook to Setup Flask (QA)
         run: ansible-playbook -i ${{ needs.terraform-qa.outputs.new_vm_ip_qa }}, ansible/playbook-qa.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
+
+  update-haproxy-config-qa:
+    runs-on: self-hosted
+    needs: [configure-vm-qa]
+    if: always() && needs.configure-vm-qa.result == 'success'
+    environment:
+      name: QA
+
+    env:
+      # Use um Secret para o IP do seu Load Balancer HAProxy
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      ANSIBLE_USER: "dev"
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update HAProxy Config
+        # Use o pipe para iniciar o bloco de comando multi-linha
+        run: | 
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/haproxy_config.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip_qa=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
+            -e "backend_name=app_servers_todo_qa" \
+            -e "app_port=5000"
+
+# --- NOVO JOB: Atualizar o Prometheus Targets para o ambiente QA ---
+  update-prometheus-targets-qa:
+    runs-on: self-hosted
+    # Este job só deve rodar após o deploy e configuração da nova VM DEV
+    needs: [configure-vm-qa] 
+    if: always() && needs.configure-vm-qa.result == 'success'
+    environment:
+      name: QA
+
+    env:
+      # Use uma variável de ambiente ou secret para o IP do seu servidor Prometheus
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      ANSIBLE_USER: "dev" # Ex: ansible_user ou um usuário dedicado
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          # Reutiliza a chave SSH. Se o usuário for diferente, pode ser necessária outra chave.
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update Prometheus Targets
+        # Executa um playbook específico no HOST do Prometheus, passando o IP da nova VM
+        run: | 
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip_qa=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
+            -e "environment_name=qa" \
+            -e "app_name=todo"
+        
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+
+  update-grafana-dashboard-qa:
+    runs-on: self-hosted
+    # Depende da atualização do Prometheus
+    needs: [configure-vm-qa, update-prometheus-targets-qa] 
+    if: always() && needs.update-prometheus-targets-qa.result == 'success'
+    environment:
+      name: QA
+      
+    env:
+      # Use o IP da VM de Monitoramento (Grafana/Prometheus)
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }} 
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init (Grafana)
+        run: |
+          terraform init \
+            -backend-config="key=app-3/qa/terraform.tfstate"
+        working-directory: ./terraform/grafana
+
+      - name: Terraform Apply (Grafana Dashboard)
+        run: | 
+          terraform apply -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=qa"
+        working-directory: ./terraform/grafana
 
 #####################################################################
 # JOB: DESTRUIR AMBIENTE DEV APÓS SUCESSO NO QA
