@@ -3,7 +3,7 @@ name: Deploy App-3 To-Do
 on:
   push:
     branches:
-      - dev
+      # - dev
       - qa
       - prod
       
@@ -121,6 +121,7 @@ jobs:
     env:
       # Use um Secret para o IP do seu Load Balancer HAProxy
       HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
       ANSIBLE_USER: "dev" # Usuário com acesso ao HAProxy
       
     steps:
@@ -287,6 +288,7 @@ jobs:
     env:
       # Use um Secret para o IP do seu Load Balancer HAProxy
       HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
       ANSIBLE_USER: "dev"
       
     steps:

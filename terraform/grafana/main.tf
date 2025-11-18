@@ -31,7 +31,7 @@ locals {
   )
 }
 
-resource "grafana_dashboard" "flask_app_dashboard" {
+resource "grafana_dashboard" "todo_app_dashboard" {
   overwrite   = true
   config_json = jsonencode(local.dashboard_config)
 }
