@@ -24,25 +24,14 @@ resource "grafana_data_source" "prometheus" {
 
 # Local para gerar o JSON do Dashboard dinamicamente
 locals {
-  # Isso irá ler o arquivo flask_metrics.json.tftpl e substituir ${environment}
-  dashboard_config = templatefile("${path.module}/dashboards/todo_metrics.json.tftpl", {
-    environment = var.environment
-  })
+  dashboard_config = jsondecode(
+    templatefile("${path.module}/dashboards/todo_metrics.json.tftpl", {
+      environment = var.environment
+    })
+  )
 }
 
-# 3. Recurso: Importação do Dashboard
-resource "grafana_dashboard" "todo_app_dashboard" {
-  # 🛑 REMOVIDO: O atributo 'uid' foi removido daqui
-  # uid   = "flask-app-${var.environment}" 
-  
-  # 🟢 ALTERADO: Usa o local gerado dinamicamente
-  config_json = local.dashboard_config
+resource "grafana_dashboard" "flask_app_dashboard" {
   overwrite   = true
+  config_json = jsonencode(local.dashboard_config)
 }
-
-/*resource "grafana_dashboard" "flask_app_dashboard" {
-  template_id = 15053
-  title       = "Flask App - ${var.environment}"
-  folder_uid  = grafana_folder.ambiente_folder.uid 
-  overwrite   = true
-}*/
