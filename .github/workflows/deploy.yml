@@ -3,8 +3,8 @@ name: Deploy App-3 To-Do
 on:
   push:
     branches:
-      # - dev
-      # - qa
+      - dev
+      - qa
       - prod
       
   # Seleção do ambiente em caso de trigger manual

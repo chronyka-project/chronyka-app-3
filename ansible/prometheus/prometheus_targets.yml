@@ -23,11 +23,6 @@
             labels:
               job: 'app-{{ app_name }}-{{ environment_name }}'
               instance: 'vm-{{ environment_name }}-{{ app_name }}'
-          
-          - targets: ["{{ new_vm_ip }}:9100"]
-            labels:
-              job: 'node-exporter' 
-              instance: 'vm-{{ environment_name }}'
 
     - name: Write new VM IP to targets file
       ansible.builtin.copy:

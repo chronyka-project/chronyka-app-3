@@ -39,20 +39,6 @@
         - '22'
         - '5000'
         - '9090'
-        - '9100'
-
-    # Instalação do Node-exporter
-    - name: Install Node Exporter package (Debian/Ubuntu)
-      ansible.builtin.package:
-        name: prometheus-node-exporter
-        state: present
-      when: ansible_os_family == "Debian"
-
-    - name: Ensure Node Exporter service is running and enabled
-      ansible.builtin.systemd:
-        name: prometheus-node-exporter
-        state: started
-        enabled: yes
 
     # --- 1. INSTALAÇÃO DO DOCKER ENGINE (Sem alterações) ---
     - name: Install required packages for Docker
