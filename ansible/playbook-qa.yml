@@ -7,6 +7,20 @@
     - name: Gathering Facts
       ansible.builtin.setup:
 
+    - name: Configure apt to prefer IPv4
+      ansible.builtin.lineinfile:
+        path: /etc/apt/apt.conf.d/99force-ipv4
+        create: yes
+        line: 'Acquire::ForceIPv4 "true";'
+        state: present
+      when: ansible_os_family == "Debian" # Aplica apenas em VMs Debian/Ubuntu
+
+    - name: Update apt cache # <--- NOVO: FORÇA A ATUALIZAÇÃO DO CACHE
+      ansible.builtin.apt:
+        update_cache: yes
+        # Se for um ambiente Debian/Ubuntu, use esta condição
+      when: ansible_os_family == "Debian"
+
     - name: Ensure Python, UFW, and DNS Utilities are installed
       ansible.builtin.package:
         name: 
@@ -16,7 +30,7 @@
           - dnsutils
         state: present
 
-    - name: Configure UFW to allow SSH (port 22) and Application Access (port 5000)
+    - name: Configure UFW to allow SSH (port 22) and app access (5000 / 9090 / 9100)
       community.general.ufw:
         rule: allow
         port: '{{ item }}'
@@ -25,6 +39,7 @@
       loop:
         - '22'
         - '5000'
+        - '9090'
 
     # --- 1. INSTALAÇÃO DO DOCKER ENGINE (Sem alterações) ---
     - name: Install required packages for Docker
