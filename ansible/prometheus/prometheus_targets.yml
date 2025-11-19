@@ -1,0 +1,40 @@
+---
+- name: Update Prometheus Targets File
+  hosts: all 
+  become: yes
+  
+  vars:
+    targets_file_path: "/etc/prometheus/targets/{{ app_name }}_{{ environment_name }}_targets.yml" 
+    prometheus_user: prometheus 
+
+  tasks:
+    - name: Ensure Prometheus targets directory exists
+      ansible.builtin.file:
+        path: "{{ targets_file_path | dirname }}"
+        state: directory
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0755'
+
+    - name: Set target content (standard prometheus target format)
+      ansible.builtin.set_fact:
+        target_content: |
+          - targets: ["{{ new_vm_ip }}:9090"]
+            labels:
+              job: 'app-{{ app_name }}-{{ environment_name }}'
+              instance: 'vm-{{ environment_name }}-{{ app_name }}'
+
+    - name: Write new VM IP to targets file
+      ansible.builtin.copy:
+        content: "{{ target_content }}"
+        dest: "{{ targets_file_path }}"
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0644'
+      register: prometheus_config_changed
+
+    - name: Restart Prometheus to load new configuration
+      ansible.builtin.systemd:
+        name: prometheus
+        state: restarted 
+      when: prometheus_config_changed.changed # Reinicia apenas se o arquivo foi alterado

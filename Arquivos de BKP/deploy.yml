@@ -16,19 +16,9 @@ on:
         default: 'dev'
         type: choice
         options:
-          - dev
-          - qa
-          - prod
-          - grafana
-
-      action_type: # NOVO INPUT
-        description: 'Selecione a Ação Manual (Deploy ou Destroy)'
-        required: true
-        default: 'deploy'
-        type: choice
-        options:
-          - deploy
-          - destroy
+          - DEV
+          - QA
+          - PROD
 
 # Variáveis de Ambiente GLOBAIS
 # Estas variáveis estarão disponíveis em TODOS os jobs (terraform-* e destroy-*)
@@ -45,7 +35,7 @@ env:
 jobs:
   terraform-dev:
     # Roda apenas em push para a branch 'dev'
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev')
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'DEV')
     runs-on: self-hosted
     outputs:
       new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
@@ -230,7 +220,7 @@ jobs:
 # JOB PARA PROVISIONAMENTO E CONFIGURAÇÃO DE QA
 #####################################################################
   terraform-qa:
-    if: github.ref == 'refs/heads/qa' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'qa')
+    if: github.ref == 'refs/heads/qa' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'QA')
     
     runs-on: self-hosted
     environment:
@@ -389,6 +379,33 @@ jobs:
         working-directory: ./terraform/grafana
 
 #####################################################################
+# JOB: DESTRUIR AMBIENTE DEV APÓS SUCESSO NO QA
+#####################################################################
+  destroy-dev-after-qa:
+    runs-on: self-hosted
+    needs: [configure-vm-qa]
+    # Roda APENAS se a configuração do QA foi um sucesso E o trigger foi um push/manual para QA/PROD.
+    if: success() && (github.ref == 'refs/heads/qa' || github.event.inputs.target_environment == 'PROD' || github.ref == 'refs/heads/prod') 
+    
+    # O bloco 'env' foi removido aqui, pois as variáveis Terraform/AWS são globais.
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init (DEV Destroy)
+        run: /usr/local/bin/terraform init
+        working-directory: ./terraform/dev
+
+      - name: Terraform Plan Destroy (DEBUG)
+        run: /usr/local/bin/terraform plan -destroy
+        working-directory: ./terraform/dev
+
+      - name: Terraform Destroy (DEV)
+        run: /usr/local/bin/terraform destroy -auto-approve
+        working-directory: ./terraform/dev
+
+#####################################################################
 # JOB 1: BUILD & PUSH (Apenas para Prod/PR Prod)
 #####################################################################
   build-and-push-image:
@@ -517,20 +534,13 @@ jobs:
         working-directory: ./terraform/prod
 
 #####################################################################
-# JOB: DESTRUIR AMBIENTES / GRAFANA
+# JOB: DESTRUIR AMBIENTE QA APÓS SUCESSO NO PROD
 #####################################################################
-  destroy-infra:
+  destroy-qa-after-prod:
     runs-on: self-hosted
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action_type == 'destroy' 
-
-    env:
-      TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
-      TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
-      TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      AWS_DEFAULT_REGION: us-east-1
+    needs: [terraform-prod]
+    # Inclui o push para 'prod' e o trigger manual
+    if: success() && (github.ref == 'refs/heads/prod' || github.event.inputs.target_environment == 'PROD') 
 
     steps:
       - name: Checkout Repository
@@ -538,12 +548,12 @@ jobs:
 
       - name: Terraform Init (QA Destroy)
         run: /usr/local/bin/terraform init
-        working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+        working-directory: ./terraform/qa
 
       - name: Terraform Plan Destroy (DEBUG)
         run: /usr/local/bin/terraform plan -destroy
-        working-directory: ./terraform/{${{ github.event.inputs.target_environment }}
-        
+        working-directory: ./terraform/qa
+
       - name: Terraform Destroy (QA)
         run: /usr/local/bin/terraform destroy -auto-approve
-        working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+        working-directory: ./terraform/qa
