@@ -8,7 +8,7 @@ terraform {
 
   # Configuração do Backend State
   backend "s3" {
-    bucket = "chronyka-terraform-state" 
+    bucket = "chronyka-terraform-state2" 
     key    = "app-3/prod/terraform.tfstate"   
     region = "us-east-1"
     encrypt = true
