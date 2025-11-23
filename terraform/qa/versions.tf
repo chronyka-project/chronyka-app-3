@@ -10,7 +10,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "chronyka-terraform-state2" 
+    bucket = "chronyka-terraform-state" 
     key    = "app-3/qa/terraform.tfstate"   
     region = "us-east-1"
     encrypt = true
