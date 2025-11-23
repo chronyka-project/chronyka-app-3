@@ -35,6 +35,33 @@ resource "aws_subnet" "todo-public" {
   }
 }
 
+resource "aws_subnet" "todo-private" {
+  count                   = 2
+  vpc_id                  = aws_vpc.todo-vpc.id
+  cidr_block              = cidrsubnet(aws_vpc.todo-vpc.cidr_block, 8, count.index + 2)
+  map_public_ip_on_launch = false
+  availability_zone       = data.aws_availability_zones.az.names[count.index]
+  tags = {
+    Name = "${var.app_name_todo}-private-subnet-${count.index + 1}"
+  }
+}
+
+resource "aws_eip" "todo-nat" {
+  domain = "vpc"
+  tags = {
+    Name = "todo-nat-eip"
+  }
+}
+
+resource "aws_nat_gateway" "todo-nat-gw" {
+  allocation_id = aws_eip.todo-nat.id
+  subnet_id     = aws_subnet.todo-public[0].id
+  tags = {
+    Name = "nat-gateway-todo"
+  }
+  depends_on = [aws_internet_gateway.todo-igw]
+}
+
 resource "aws_route_table" "todo-public-rtb" {
   vpc_id = aws_vpc.todo-vpc.id
   route {
@@ -44,6 +71,25 @@ resource "aws_route_table" "todo-public-rtb" {
   tags = {
     Name = "${var.app_name_todo}-public-rt"
   }
+}
+
+resource "aws_route_table" "todo-private-rtb" {
+  vpc_id = aws_vpc.todo-vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.todo-nat-gw.id
+  }
+
+  tags = {
+    Name = "private-route-table-todo"
+  }
+}
+
+resource "aws_route_table_association" "todo-private-assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.todo-private[count.index].id
+  route_table_id = aws_route_table.todo-private-rtb.id
 }
 
 resource "aws_route_table_association" "todo-public-assoc" {
@@ -206,6 +252,60 @@ resource "aws_autoscaling_group" "ec2_asg" {
     value               = "${var.app_name_todo}-web-instance"
     propagate_at_launch = true
   }
+}
+
+#########################################
+# Scaling Policies
+#########################################
+resource "aws_autoscaling_policy" "todo-scale_up" {
+  name                   = "cpu-scale-up"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.ec2_asg.name
+}
+
+resource "aws_autoscaling_policy" "todo-scale_down" {
+  name                   = "cpu-scale-down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.ec2_asg.name
+}
+
+#########################################
+# CloudWatch Alarms
+#########################################
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = "cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 60
+  alarm_description   = "Escala para cima quando CPU > 60%"
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.ec2_asg.name
+  }
+  alarm_actions = [aws_autoscaling_policy.todo-scale_up.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_low" {
+  alarm_name          = "cpu-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 20
+  alarm_description   = "Escala para baixo quando CPU < 20%"
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.ec2_asg.name
+  }
+  alarm_actions = [aws_autoscaling_policy.todo-scale_down.arn]
 }
 
 # --- 7. ALB (Load Balancer) ---
