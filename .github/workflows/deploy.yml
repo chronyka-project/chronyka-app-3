@@ -352,7 +352,7 @@ jobs:
           ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
-            -e "new_vm_ip_qa=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
+            -e "new_vm_ip=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
             -e "environment_name=qa" \
             -e "app_name=todo"
         
@@ -463,8 +463,8 @@ jobs:
       full_image_uri: ${{ steps.image_info.outputs.FULL_IMAGE_URI }}
 
 #####################################################################
-  # JOB 2: INFRAESTRUTURA PROD (AWS EC2/Docker) - PASSO FINAL
-  #####################################################################
+# JOB 2: INFRAESTRUTURA PROD (AWS EC2/Docker) - PASSO FINAL
+#####################################################################
   terraform-prod:
     # Depende apenas do build da imagem
     needs: [build-and-push-image]
