@@ -23,4 +23,5 @@ variable "environment" {
 variable "app_name" {
   description = "Nome da aplicação"
   type        = string
+  default     = "todo"
 }
