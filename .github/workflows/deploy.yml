@@ -231,6 +231,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=dev"
+            -var "app_name=todo"
         working-directory: ./terraform/grafana/dev
 
 #####################################################################
@@ -393,6 +394,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=qa"
+            -var "app_name=todo"
         working-directory: ./terraform/grafana/qa
 
 #####################################################################

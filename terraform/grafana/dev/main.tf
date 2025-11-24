@@ -16,7 +16,7 @@ provider "grafana" {
 # 2. Recurso: Fonte de Dados Prometheus (Garante que ela exista)
 resource "grafana_data_source" "prometheus" {
   type        = "prometheus"
-  name        = var.datasource_name
+  name        = "prometheus-${var.environment}-${var.app_name}"
   url         = "http://localhost:9090" # Assumindo que Prometheus roda na mesma VM que o Grafana, na porta 9090
   is_default  = false
   access_mode = "proxy"
