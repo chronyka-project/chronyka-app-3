@@ -19,3 +19,9 @@ variable "environment" {
   description = "Nome do ambiente (dev, qa, prod)"
   type        = string
 }
+
+variable "app_name" {
+  description = "Nome da aplicação"
+  type        = string
+  default     = "todo"
+}

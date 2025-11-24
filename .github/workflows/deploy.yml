@@ -3,8 +3,8 @@ name: Deploy App-3 To-Do
 on:
   push:
     branches:
-      - dev
-      - qa
+      # - dev
+      # - qa
       - prod
       
   # Seleção do ambiente em caso de trigger manual
@@ -102,11 +102,20 @@ jobs:
     steps:
       - name: Checkout Repository (Para o Playbook Ansible e arquivos)
         uses: actions/checkout@v4
+
+      - name: Remove chave SSH antiga do host (Corrige Host Key Changed)
+        run: |
+          VM_IP="${{ needs.terraform-dev.outputs.new_vm_ip }}"
+          # O '|| true' garante que o pipeline não falhe se a chave não existir
+          ssh-keygen -f /home/dev/.ssh/known_hosts -R "$VM_IP" || true
       
       - name: Prepare SSH Key for Ansible
         run: |
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
           chmod 600 /tmp/ansible_key
+          # Adicione a chave ao ssh-agent (melhor prática)
+          eval "$(ssh-agent -s)"
+          ssh-add /tmp/ansible_key
       
       - name: DEBUG - List files expected by Ansible
         run: |
@@ -119,11 +128,11 @@ jobs:
       
       - name: Run Ansible Playbook to Setup Flask
         # Usando as variáveis globais do Ansible definidas no 'env' do job
-        run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
-
+        run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+  
   update-haproxy-config-dev:
     runs-on: self-hosted
-    needs: [configure-vm-dev] # Assumindo que você renomeou o job de configuração
+    needs: [configure-vm-dev]
     if: always() && needs.configure-vm-dev.result == 'success'
     environment:
       name: DEV
@@ -213,10 +222,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Init (Grafana)
-        run: |
-          terraform init \
-            -backend-config="key=app-3/dev/terraform.tfstate"
-        working-directory: ./terraform/grafana
+        run: terraform init
+        working-directory: ./terraform/grafana/dev
 
       - name: Terraform Apply (Grafana Dashboard)
         run: | 
@@ -224,7 +231,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=dev"
-        working-directory: ./terraform/grafana
+        working-directory: ./terraform/grafana/dev
 
 #####################################################################
 # JOB PARA PROVISIONAMENTO E CONFIGURAÇÃO DE QA
@@ -263,6 +270,8 @@ jobs:
     runs-on: self-hosted
     needs: [terraform-qa] # Depende do provisionamento do QA
     if: always() && needs.terraform-qa.result == 'success'
+    outputs:
+      new_vm_ip_qa: ${{ needs.terraform-qa.outputs.new_vm_ip_qa}}
     environment:
       name: QA
       url: http://${{ needs.terraform-qa.outputs.new_vm_ip_qa }}:5000
@@ -350,7 +359,7 @@ jobs:
           ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
-            -e "new_vm_ip_qa=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
+            -e "new_vm_ip=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
             -e "environment_name=qa" \
             -e "app_name=todo"
         
@@ -375,10 +384,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Init (Grafana)
-        run: |
-          terraform init \
-            -backend-config="key=app-3/qa/terraform.tfstate"
-        working-directory: ./terraform/grafana
+        run: terraform init
+        working-directory: ./terraform/grafana/qa
 
       - name: Terraform Apply (Grafana Dashboard)
         run: | 
@@ -386,7 +393,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=qa"
-        working-directory: ./terraform/grafana
+        working-directory: ./terraform/grafana/qa
 
 #####################################################################
 # JOB 1: BUILD & PUSH (Apenas para Prod/PR Prod)
@@ -461,8 +468,8 @@ jobs:
       full_image_uri: ${{ steps.image_info.outputs.FULL_IMAGE_URI }}
 
 #####################################################################
-  # JOB 2: INFRAESTRUTURA PROD (AWS EC2/Docker) - PASSO FINAL
-  #####################################################################
+# JOB 2: INFRAESTRUTURA PROD (AWS EC2/Docker) - PASSO FINAL
+#####################################################################
   terraform-prod:
     # Depende apenas do build da imagem
     needs: [build-and-push-image]
