@@ -3,8 +3,8 @@ name: Deploy App-3 To-Do
 on:
   push:
     branches:
-      - dev
-      - qa
+      # - dev
+      # - qa
       - prod
       
   # Seleção do ambiente em caso de trigger manual
@@ -123,7 +123,7 @@ jobs:
 
   update-haproxy-config-dev:
     runs-on: self-hosted
-    needs: [configure-vm-dev] # Assumindo que você renomeou o job de configuração
+    needs: [configure-vm-dev]
     if: always() && needs.configure-vm-dev.result == 'success'
     environment:
       name: DEV
@@ -263,6 +263,8 @@ jobs:
     runs-on: self-hosted
     needs: [terraform-qa] # Depende do provisionamento do QA
     if: always() && needs.terraform-qa.result == 'success'
+    outputs:
+      new_vm_ip_qa: ${{ needs.terraform-qa.outputs.new_vm_ip_qa}}
     environment:
       name: QA
       url: http://${{ needs.terraform-qa.outputs.new_vm_ip_qa }}:5000
