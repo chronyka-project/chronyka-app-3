@@ -213,10 +213,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Init (Grafana)
-        run: |
-          terraform init \
-            -backend-config="key=app-3/dev/terraform.tfstate"
-        working-directory: ./terraform/grafana
+        run: terraform init
+        working-directory: ./terraform/grafana/dev
 
       - name: Terraform Apply (Grafana Dashboard)
         run: | 
@@ -224,7 +222,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=dev"
-        working-directory: ./terraform/grafana
+        working-directory: ./terraform/grafana/dev
 
 #####################################################################
 # JOB PARA PROVISIONAMENTO E CONFIGURAÇÃO DE QA
@@ -377,10 +375,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Init (Grafana)
-        run: |
-          terraform init \
-            -backend-config="key=app-3/qa/terraform.tfstate"
-        working-directory: ./terraform/grafana
+        run: terraform init
+        working-directory: ./terraform/grafana/qa
 
       - name: Terraform Apply (Grafana Dashboard)
         run: | 
@@ -388,7 +384,7 @@ jobs:
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=qa"
-        working-directory: ./terraform/grafana
+        working-directory: ./terraform/grafana/qa
 
 #####################################################################
 # JOB 1: BUILD & PUSH (Apenas para Prod/PR Prod)
