@@ -102,11 +102,20 @@ jobs:
     steps:
       - name: Checkout Repository (Para o Playbook Ansible e arquivos)
         uses: actions/checkout@v4
+
+      - name: Remove chave SSH antiga do host (Corrige Host Key Changed)
+        run: |
+          VM_IP="${{ needs.terraform-dev.outputs.new_vm_ip }}"
+          # O '|| true' garante que o pipeline não falhe se a chave não existir
+          ssh-keygen -f /home/dev/.ssh/known_hosts -R "$VM_IP" || true
       
       - name: Prepare SSH Key for Ansible
         run: |
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
           chmod 600 /tmp/ansible_key
+          # Adicione a chave ao ssh-agent (melhor prática)
+          eval "$(ssh-agent -s)"
+          ssh-add /tmp/ansible_key
       
       - name: DEBUG - List files expected by Ansible
         run: |
@@ -119,8 +128,8 @@ jobs:
       
       - name: Run Ansible Playbook to Setup Flask
         # Usando as variáveis globais do Ansible definidas no 'env' do job
-        run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key
-
+        run: ansible-playbook -i ${{ needs.terraform-dev.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+  
   update-haproxy-config-dev:
     runs-on: self-hosted
     needs: [configure-vm-dev]
