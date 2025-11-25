@@ -30,6 +30,9 @@ on:
           - deploy
           - destroy
 
+  repository_dispatch:
+    types: [run-autoscaling-todo]
+
 # Variáveis de Ambiente GLOBAIS
 # Estas variáveis estarão disponíveis em TODOS os jobs (terraform-* e destroy-*)
 env:
