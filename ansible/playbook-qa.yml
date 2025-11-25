@@ -170,6 +170,9 @@
         chdir: /home/dev/app/qa-tests
       become: yes
       become_user: dev
+      environment:
+        # A URL que o Pytest irá usar
+        UNIFIED_APP_URL: "http://127.0.0.1:5000"
       register: test_results
 
     - name: Display Test Results
