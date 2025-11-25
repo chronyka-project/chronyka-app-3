@@ -331,7 +331,7 @@ jobs:
           ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/haproxy_config.yml \
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
-            -e "new_vm_ip_qa=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
+            -e "new_vm_ip=${{ needs.configure-vm-qa.outputs.new_vm_ip_qa }}" \
             -e "backend_name=app_servers_todo_qa" \
             -e "app_port=5000"
 
