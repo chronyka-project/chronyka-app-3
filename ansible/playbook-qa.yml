@@ -134,11 +134,21 @@
     - name: Copy test scripts and requirements.txt (e.g., pytest, selenium)
       ansible.builtin.copy:
         # ATENÇÃO: Ajuste este caminho 'src' para o local onde os seus arquivos de teste estão no host
-        src: ../files/qa-tests/ 
+        src: files/qa-tests/ 
         dest: /home/dev/app/qa-tests
         owner: dev
         group: dev
         mode: '0755'
+    
+    - name: DEBUG Verificar o Conteúdo da Pasta de Testes Remota
+      ansible.builtin.command: ls -la /home/dev/app/qa-tests
+      register: test_files
+      become: yes
+      become_user: dev
+    
+    - name: Exibir arquivos de teste copiados
+      ansible.builtin.debug:
+        var: test_files.stdout_lines
 
     - name: Install Python test dependencies
       ansible.builtin.pip:

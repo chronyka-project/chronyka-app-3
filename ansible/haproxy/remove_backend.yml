@@ -1,0 +1,62 @@
+---
+# ansible/haproxy/remove_backend.yml
+# Playbook para remover servidor do backend do HAProxy
+
+- name: Remove Backend Server from HAProxy
+  hosts: all
+  become: yes
+  vars:
+    vm_ip_to_remove: "{{ vm_ip }}"
+    backend_name: "{{ backend }}"
+    haproxy_config_path: "/etc/haproxy/haproxy.cfg"
+    backup_enabled: true
+  
+  tasks:
+    - name: Create backup of HAProxy config
+      copy:
+        src: "{{ haproxy_config_path }}"
+        dest: "{{ haproxy_config_path }}.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when: backup_enabled | bool
+
+    - name: Check if VM IP exists in HAProxy config
+      shell: grep -c "{{ vm_ip_to_remove }}" "{{ haproxy_config_path }}" || true
+      register: ip_exists
+      changed_when: false
+
+    - name: Display check result
+      debug:
+        msg: "IP {{ vm_ip_to_remove }} encontrado {{ ip_exists.stdout }} vez(es) no config"
+
+    - name: Remove server line from HAProxy backend
+      lineinfile:
+        path: "{{ haproxy_config_path }}"
+        regexp: "^\\s*server\\s+.*{{ vm_ip_to_remove }}:.*$"
+        state: absent
+      when: ip_exists.stdout | int > 0
+      notify: 
+        - validate haproxy config
+        - reload haproxy
+
+    - name: Remove any additional references to the IP
+      lineinfile:
+        path: "{{ haproxy_config_path }}"
+        regexp: ".*{{ vm_ip_to_remove }}.*"
+        state: absent
+      when: ip_exists.stdout | int > 0
+      notify: 
+        - validate haproxy config
+        - reload haproxy
+
+  handlers:
+    - name: validate haproxy config
+      command: haproxy -c -f "{{ haproxy_config_path }}"
+      register: haproxy_check
+      failed_when: haproxy_check.rc != 0
+      changed_when: false
+
+    - name: reload haproxy
+      service:
+        name: haproxy
+        state: reloaded
+      when: haproxy_check.rc == 0
