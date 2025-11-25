@@ -48,7 +48,10 @@ env:
 jobs:
   terraform-dev:
     # Roda apenas em push para a branch 'dev'
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'deploy')
+    if: |
+      (github.ref == 'refs/heads/dev' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'deploy') ||
+      (github.event_name == 'repository_dispatch' && github.event.action == 'run-autoscaling-todo')
     runs-on: self-hosted
     outputs:
       new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
