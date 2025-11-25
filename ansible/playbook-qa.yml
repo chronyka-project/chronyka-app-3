@@ -134,7 +134,7 @@
     - name: Copy test scripts and requirements.txt (e.g., pytest, selenium)
       ansible.builtin.copy:
         # ATENÇÃO: Ajuste este caminho 'src' para o local onde os seus arquivos de teste estão no host
-        src: files/qa-tests/ 
+        src: ../files/qa-tests/ 
         dest: /home/dev/app/qa-tests
         owner: dev
         group: dev
