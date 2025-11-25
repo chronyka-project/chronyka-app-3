@@ -45,7 +45,7 @@ env:
 jobs:
   terraform-dev:
     # Roda apenas em push para a branch 'dev'
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev')
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'deploy')
     runs-on: self-hosted
     outputs:
       new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
@@ -237,7 +237,7 @@ jobs:
 # JOB PARA PROVISIONAMENTO E CONFIGURAÇÃO DE QA
 #####################################################################
   terraform-qa:
-    if: github.ref == 'refs/heads/qa' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'qa')
+    if: github.ref == 'refs/heads/qa' && github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'qa' && github.event.inputs.action_type == 'deploy')
     
     runs-on: self-hosted
     environment:
@@ -288,7 +288,13 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+            
+      - name: Remove chave SSH antiga do host (Corrige Host Key Changed)
+        run: |
+          VM_IP="${{ needs.terraform-qa.outputs.new_vm_ip_qa }}"
+          # O '|| true' garante que o pipeline não falhe se a chave não existir
+          ssh-keygen -f /home/dev/.ssh/known_hosts -R "$VM_IP" || true
+
       - name: Prepare SSH Key for Ansible
         run: |
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
@@ -526,31 +532,237 @@ jobs:
 #####################################################################
 # JOB: DESTRUIR AMBIENTES / GRAFANA
 #####################################################################
-  destroy-infra:
+  # destroy-infra:
+  #  runs-on: self-hosted
+  #  if: github.event_name == 'workflow_dispatch' && github.event.inputs.action_type == 'destroy' 
+
+  #  env:
+  #    TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+  #    TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+  #    TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+  #    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #    AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  #    AWS_DEFAULT_REGION: us-east-1
+
+  #  steps:
+  #    - name: Checkout Repository
+  #      uses: actions/checkout@v4
+
+  #    - name: Terraform Init (QA Destroy)
+  #      run: /usr/local/bin/terraform init
+  #      working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+
+  #    - name: Terraform Plan Destroy (DEBUG)
+  #      run: /usr/local/bin/terraform plan -destroy
+  #      working-directory: ./terraform/{${{ github.event.inputs.target_environment }}
+        
+  #    - name: Terraform Destroy (QA)
+  #      run: /usr/local/bin/terraform destroy -auto-approve
+  #      working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+
+  #####################################################################
+# JOBS DE DESTROY PARA OS AMBIENTES DEV E QA (Versão Limpa)
+# Usa playbooks Ansible do repositório (sem arquivos temporários)
+#####################################################################
+
+  # ============================================================
+  # DESTROY DEV ENVIRONMENT
+  # ============================================================
+  destroy-dev:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'destroy'
     runs-on: self-hosted
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action_type == 'destroy' 
-
+    environment:
+      name: DEV
+    
     env:
-      TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
-      TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
-      TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      AWS_DEFAULT_REGION: us-east-1
-
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }}
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_USER: "dev"
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Terraform Init (QA Destroy)
-        run: /usr/local/bin/terraform init
-        working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+      # PASSO 1: Obter IP da VM antes de destruir
+      - name: Get Current VM IP
+        id: get-current-ip
+        run: |
+          cd ./terraform/dev
+          /usr/local/bin/terraform init
+          VM_IP=$(/usr/local/bin/terraform output -raw new_vm_ip 2>/dev/null || echo "")
+          echo "current_vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "VM IP a ser destruída: $VM_IP"
+        continue-on-error: true
 
-      - name: Terraform Plan Destroy (DEBUG)
-        run: /usr/local/bin/terraform plan -destroy
-        working-directory: ./terraform/{${{ github.event.inputs.target_environment }}
-        
-      - name: Terraform Destroy (QA)
-        run: /usr/local/bin/terraform destroy -auto-approve
-        working-directory: ./terraform/${{ github.event.inputs.target_environment }}
+      # PASSO 2: Remover IP do HAProxy
+      - name: Remove VM from HAProxy
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/remove_backend.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "backend=app_servers_todo_dev"
+          
+          echo "✅ IP ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do HAProxy"
+        continue-on-error: true
+
+      # PASSO 3: Remover target do Prometheus
+      - name: Remove VM from Prometheus Targets
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/remove_target.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "environment=dev" \
+            -e "app=todo"
+          
+          echo "✅ Target ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do Prometheus"
+        continue-on-error: true
+
+      # PASSO 4: Destruir Dashboard do Grafana
+      - name: Destroy Grafana Dashboard
+        run: |
+          cd ./terraform/grafana/dev
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=dev"
+          
+          echo "✅ Dashboard do Grafana destruído"
+        continue-on-error: true
+
+      # PASSO 5: Destruir VM do VMware
+      - name: Destroy VM from VMware
+        run: |
+          cd ./terraform/dev
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve
+          
+          echo "✅ VM do VMware destruída com sucesso"
+
+      # PASSO 6: Cleanup
+      - name: Cleanup SSH Keys
+        run: |
+          rm -f /tmp/ansible_key
+          
+          # Remove a chave SSH da VM destruída do known_hosts
+          if [ -n "${{ steps.get-current-ip.outputs.current_vm_ip }}" ]; then
+            ssh-keygen -f /home/dev/.ssh/known_hosts -R "${{ steps.get-current-ip.outputs.current_vm_ip }}" || true
+          fi
+          
+          echo "✅ Cleanup concluído"
+        continue-on-error: true
+
+  # ============================================================
+  # DESTROY QA ENVIRONMENT
+  # ============================================================
+  destroy-qa:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'qa' && github.event.inputs.action_type == 'destroy'
+    runs-on: self-hosted
+    environment:
+      name: QA
+    
+    env:
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }}
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_USER: "dev"
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # PASSO 1: Obter IP da VM antes de destruir
+      - name: Get Current VM IP
+        id: get-current-ip
+        run: |
+          cd ./terraform/qa
+          /usr/local/bin/terraform init
+          VM_IP=$(/usr/local/bin/terraform output -raw new_vm_ip 2>/dev/null || echo "")
+          echo "current_vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "VM IP a ser destruída: $VM_IP"
+        continue-on-error: true
+
+      # PASSO 2: Remover IP do HAProxy
+      - name: Remove VM from HAProxy
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/remove_backend.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "backend=app_servers_todo_qa"
+          
+          echo "✅ IP ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do HAProxy"
+        continue-on-error: true
+
+      # PASSO 3: Remover target do Prometheus
+      - name: Remove VM from Prometheus Targets
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/remove_target.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "environment=qa" \
+            -e "app=todo"
+          
+          echo "✅ Target ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do Prometheus"
+        continue-on-error: true
+
+      # PASSO 4: Destruir Dashboard do Grafana
+      - name: Destroy Grafana Dashboard
+        run: |
+          cd ./terraform/grafana/qa
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=qa"
+          
+          echo "✅ Dashboard do Grafana destruído"
+        continue-on-error: true
+
+      # PASSO 5: Destruir VM do VMware
+      - name: Destroy VM from VMware
+        run: |
+          cd ./terraform/qa
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve
+          
+          echo "✅ VM do VMware destruída com sucesso"
+
+      # PASSO 6: Cleanup
+      - name: Cleanup SSH Keys
+        run: |
+          rm -f /tmp/ansible_key
+          
+          # Remove a chave SSH da VM destruída do known_hosts
+          if [ -n "${{ steps.get-current-ip.outputs.current_vm_ip }}" ]; then
+            ssh-keygen -f /home/dev/.ssh/known_hosts -R "${{ steps.get-current-ip.outputs.current_vm_ip }}" || true
+          fi
+          
+          echo "✅ Cleanup concluído"
+        continue-on-error: true
+
