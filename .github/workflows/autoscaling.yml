@@ -1,0 +1,193 @@
+name: Autoscaling app ToDo
+
+on:
+  repository_dispatch:
+    types: [run-autoscaling-todo]
+
+env:
+  TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
+  TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
+  TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  AWS_DEFAULT_REGION: us-east-1
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform-dev-autoscaling:
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'run-autoscaling-todo'
+    runs-on: self-hosted
+    outputs:
+      new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
+    environment:
+      name: DEV
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        id: init
+        run: /usr/local/bin/terraform init
+        working-directory: ./terraform/autoscaling/dev
+
+      - name: Terraform Plan
+        id: plan
+        run: /usr/local/bin/terraform plan -input=false -out=tfplan
+        working-directory: ./terraform/autoscaling/dev
+        continue-on-error: true
+        
+      - name: Terraform Apply
+        if: steps.plan.outcome == 'success'
+        run: /usr/local/bin/terraform apply -auto-approve tfplan
+        working-directory: ./terraform/autoscaling/dev
+
+      - name: Get VM IP and Set as Output
+        id: get-ip
+        run: echo "new_vm_ip=$(/usr/local/bin/terraform output -raw new_vm_ip)" >> $GITHUB_OUTPUT
+        working-directory: ./terraform/autoscaling/dev
+
+  configure-vm-dev-autoscaling:
+    runs-on: self-hosted
+    needs: [terraform-dev-autoscaling]
+    if: always() && needs.terraform-dev-autoscaling.result == 'success'
+    outputs:
+      new_vm_ip: ${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}
+    environment:
+      name: DEV
+      url: http://${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}:5000
+      
+    env:
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_USER: "dev"
+      ANSIBLE_CONNECTION: "ssh"
+      ANSIBLE_CONNECT_TIMEOUT: "30"
+      ANSIBLE_TIMEOUT: "60"
+      ANSIBLE_BECOME: "true"
+
+    steps:
+      - name: Checkout Repository (Para o Playbook Ansible e arquivos)
+        uses: actions/checkout@v4
+
+      - name: Remove chave SSH antiga do host (Corrige Host Key Changed)
+        run: |
+          VM_IP="${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}"
+          # O '|| true' garante que o pipeline não falhe se a chave não existir
+          ssh-keygen -f /home/dev/.ssh/known_hosts -R "$VM_IP" || true
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          # Adicione a chave ao ssh-agent (melhor prática)
+          eval "$(ssh-agent -s)"
+          ssh-add /tmp/ansible_key
+      
+      - name: DEBUG - List files expected by Ansible
+        run: |
+          echo "Current directory is: $(pwd)"
+          echo "Listing content of: files/"
+          ls -la files/
+          echo "Listing content of: ansible/"
+          ls -la ansible/
+        continue-on-error: true    
+      
+      - name: Run Ansible Playbook to Setup Flask
+        run: ansible-playbook -i ${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+
+  update-haproxy-config-dev-autoscaling:
+    runs-on: self-hosted
+    needs: [configure-vm-dev-autoscaling]
+    if: always() && needs.configure-vm-dev-autoscaling.result == 'success'
+    environment:
+      name: DEV
+
+    env:
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_USER: "dev" # Usuário com acesso ao HAProxy
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update HAProxy Config
+        run: | 
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/haproxy_config.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip=${{ needs.configure-vm-dev-autoscaling.outputs.new_vm_ip }}" \
+            -e "backend_name=app_servers_todo_dev" \
+            -e "app_port=5000"
+
+  update-prometheus-targets-dev-autoscaling:
+    runs-on: self-hosted
+    needs: [configure-vm-dev-autoscaling] 
+    if: always() && needs.configure-vm-dev-autoscaling.result == 'success'
+    environment:
+      name: DEV
+
+    env:
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      ANSIBLE_USER: "dev"
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare SSH Key for Ansible
+        run: |
+          # Reutiliza a chave SSH. Se o usuário for diferente, pode ser necessária outra chave.
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+        
+      - name: Run Ansible Playbook to Update Prometheus Targets
+        # Executa um playbook específico no HOST do Prometheus, passando o IP da nova VM
+        run: | 
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "new_vm_ip=${{ needs.configure-vm-dev-autoscaling.outputs.new_vm_ip }}" \
+            -e "environment_name=dev" \
+            -e "app_name=todo"
+        
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+  
+  update-grafana-dashboard-dev:
+    runs-on: self-hosted
+    needs: [configure-vm-dev-autoscaling, update-prometheus-targets-dev-autoscaling] 
+    if: always() && needs.update-prometheus-targets-dev-autoscaling.result == 'success'
+    environment:
+      name: DEV
+      
+    env:
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }} 
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init (Grafana)
+        run: terraform init
+        working-directory: ./terraform/grafana/autoscaling/dev
+
+      - name: Terraform Apply (Grafana Dashboard)
+        run: | 
+          terraform apply -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=dev-autoscaling"
+        working-directory: ./terraform/grafana/autoscaling/dev
