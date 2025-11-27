@@ -2,7 +2,9 @@ name: Autoscaling app ToDo
 
 on:
   repository_dispatch:
-    types: [run-autoscaling-todo]
+    types: 
+      - scale-up-todo
+      - scale-down-todo
 
 env:
   TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
@@ -16,7 +18,7 @@ env:
 
 jobs:
   terraform-dev-autoscaling:
-    if: github.event_name == 'repository_dispatch' && github.event.action == 'run-autoscaling-todo'
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'scale-up-todo'
     runs-on: self-hosted
     outputs:
       new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
@@ -198,3 +200,103 @@ jobs:
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
             -var "environment=dev-autoscaling"
         working-directory: ./terraform/grafana/autoscaling/dev
+
+# ============================================================
+# DESTROY DEV ENVIRONMENT
+# ============================================================
+  destroy-dev-autoscaling:
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'scale-down-todo'    
+    runs-on: self-hosted
+    environment:
+      name: DEV
+    
+    env:
+      HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
+      PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
+      GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }}
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_USER: "dev"
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # PASSO 1: Obter IP da VM antes de destruir
+      - name: Get Current VM IP
+        id: get-current-ip
+        run: |
+          cd ./terraform/autoscaling/dev
+          /usr/local/bin/terraform init
+          VM_IP=$(/usr/local/bin/terraform output -raw new_vm_ip 2>/dev/null || echo "")
+          echo "current_vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "VM IP a ser destruída: $VM_IP"
+        continue-on-error: true
+
+      # PASSO 2: Remover IP do HAProxy
+      - name: Remove VM from HAProxy
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/remove_backend.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "backend=app_servers_todo_dev"
+          
+          echo "✅ IP ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do HAProxy"
+        continue-on-error: true
+
+      # PASSO 3: Remover target do Prometheus
+      - name: Remove VM from Prometheus Targets
+        if: steps.get-current-ip.outputs.current_vm_ip != ''
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /tmp/ansible_key
+          chmod 600 /tmp/ansible_key
+          
+          ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/remove_target.yml \
+            --user ${{ env.ANSIBLE_USER }} \
+            --private-key /tmp/ansible_key \
+            -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
+            -e "environment=dev" \
+            -e "app=todo"
+          
+          echo "✅ Target ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do Prometheus"
+        continue-on-error: true
+
+      # PASSO 4: Destruir Dashboard do Grafana
+      - name: Destroy Grafana Dashboard
+        run: |
+          cd ./terraform/grafana/autoscaling/dev
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve \
+            -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
+            -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
+            -var "environment=dev"
+          
+          echo "✅ Dashboard do Grafana destruído"
+        continue-on-error: true
+
+      # PASSO 5: Destruir VM do VMware
+      - name: Destroy VM from VMware
+        run: |
+          cd ./terraform/autoscaling/dev
+          /usr/local/bin/terraform init
+          /usr/local/bin/terraform destroy -auto-approve
+          
+          echo "✅ VM do VMware destruída com sucesso"
+
+      # PASSO 6: Cleanup
+      - name: Cleanup SSH Keys
+        run: |
+          rm -f /tmp/ansible_key
+          
+          # Remove a chave SSH da VM destruída do known_hosts
+          if [ -n "${{ steps.get-current-ip.outputs.current_vm_ip }}" ]; then
+            ssh-keygen -f /home/dev/.ssh/known_hosts -R "${{ steps.get-current-ip.outputs.current_vm_ip }}" || true
+          fi
+          
+          echo "✅ Cleanup concluído"
+        continue-on-error: true

@@ -30,9 +30,6 @@ on:
           - deploy
           - destroy
 
-  # repository_dispatch:
-  #  types: [run-autoscaling-todo]
-
 # Variáveis de Ambiente GLOBAIS
 # Estas variáveis estarão disponíveis em TODOS os jobs (terraform-* e destroy-*)
 env:
@@ -47,7 +44,6 @@ env:
 
 jobs:
   terraform-dev:
-    # Roda apenas em push para a branch 'dev'
     if: |
       (github.ref == 'refs/heads/dev' && github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'deploy')
@@ -536,39 +532,6 @@ jobs:
 
 #####################################################################
 # JOB: DESTRUIR AMBIENTES / GRAFANA
-#####################################################################
-  # destroy-infra:
-  #  runs-on: self-hosted
-  #  if: github.event_name == 'workflow_dispatch' && github.event.inputs.action_type == 'destroy' 
-
-  #  env:
-  #    TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
-  #    TF_VAR_vsphere_user: ${{ secrets.VSPHERE_USER }}
-  #    TF_VAR_vsphere_password: ${{ secrets.VSPHERE_PASSWORD }}
-  #    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #    AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-  #    AWS_DEFAULT_REGION: us-east-1
-
-  #  steps:
-  #    - name: Checkout Repository
-  #      uses: actions/checkout@v4
-
-  #    - name: Terraform Init (QA Destroy)
-  #      run: /usr/local/bin/terraform init
-  #      working-directory: ./terraform/${{ github.event.inputs.target_environment }}
-
-  #    - name: Terraform Plan Destroy (DEBUG)
-  #      run: /usr/local/bin/terraform plan -destroy
-  #      working-directory: ./terraform/{${{ github.event.inputs.target_environment }}
-        
-  #    - name: Terraform Destroy (QA)
-  #      run: /usr/local/bin/terraform destroy -auto-approve
-  #      working-directory: ./terraform/${{ github.event.inputs.target_environment }}
-
-  #####################################################################
-# JOBS DE DESTROY PARA OS AMBIENTES DEV E QA (Versão Limpa)
-# Usa playbooks Ansible do repositório (sem arquivos temporários)
 #####################################################################
 
   # ============================================================
