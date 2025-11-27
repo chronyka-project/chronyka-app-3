@@ -1,164 +1,212 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
   "gnetId": null,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
-  "title": "Dashboard Completo ToDo/VM - Ambiente ${environment}",
-  "uid": "todo-app-${environment}",
   "panels": [
-   {
-      "title": "Taxa de Requisições Total (Req/s)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "sum(rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m]))",
-          "legendFormat": "Total",
-          "refId": "A"
-        }
-      ]
-    },
     {
-      "title": "Taxa de Erros HTTP (5xx)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "sum(rate(flask_http_requests_total{job=\"app-todo-${environment}\", code=~\"5..\"}[5m]))",
-          "legendFormat": "Erros 5xx",
-          "refId": "A"
-        }
-      ],
-      "unit": "reqs/sec"
-    },
-    {
-      "title": "Latência da Requisição (p95)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{job=\"app-todo-${environment}\"}[5m])) by (le))",
-          "legendFormat": "p95 Latency",
-          "refId": "A"
-        }
-      ],
-      "unit": "s"
-    },
-     {
-      "title": "Requisições por Status Code (5m)",
-      "type": "bargauge",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "sum by (code) (rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m]))",
-          "legendFormat": "{{code}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "Requisições por Endpoint (Top 10)",
-      "type": "stat",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "topk(10, sum by (path) (rate(flask_http_requests_total{job=\"app-todo-${environment}\"}[5m])))",
-          "legendFormat": "{{path}}",
-          "refId": "A"
-        }
-      ]
-    },
-     {
-      "title": "Uso de CPU do Host (%)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", instance=\"vm-${environment}\"}[5m])) * 100)",
-          "legendFormat": "CPU Utilizada",
-          "refId": "A"
-        }
-      ],
-      "unit": "percent"
-    },
-    {
-      "title": "Uso de Memória do Host (%)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{instance=\"vm-${environment}\"} / node_memory_MemTotal_bytes{instance=\"vm-${environment}\"}))",
-          "legendFormat": "Memória Utilizada",
-          "refId": "A"
-        }
-      ],
-      "unit": "percent"
-    },
-    {
-      "title": "I/O de Disco (Bytes/s)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "targets": [
-        {
-          "expr": "rate(node_disk_bytes_read_total{instance=\"vm-${environment}\"}[5m])",
-          "legendFormat": "Leitura",
-          "refId": "A"
+      "datasource": "${datasource_name}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "req/s"
         },
-        {
-          "expr": "rate(node_disk_bytes_written_total{instance=\"vm-${environment}\"}[5m])",
-          "legendFormat": "Escrita",
-          "refId": "B"
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "mean",
+            "min"
+          ],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "sort": "none",
+          "timeStatic": false
         }
-      ],
-      "unit": "bytes/sec"
-    },
-    {
-      "title": "Tráfego de Rede (Bytes/s)",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      },
       "targets": [
         {
-          "expr": "sum(rate(node_network_receive_bytes_total{instance=\"vm-${environment}\", device!=\"lo\"}[5m]))",
-          "legendFormat": "Recebido (Rx)",
+          "expr": "sum(rate(flask_http_request_duration_seconds_count{path!=\"/metrics\", path!=\"/health\"}[1m])) by (method, path)",
+          "legendFormat": "{{method}} {{path}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(node_network_transmit_bytes_total{instance=\"vm-${environment}\", device!=\"lo\"}[5m]))",
-          "legendFormat": "Transmitido (Tx)",
-          "refId": "B"
         }
       ],
-      "unit": "bytes/sec"
+      "title": "Taxa de Requisições HTTP (Rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${datasource_name}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "mean",
+            "min"
+          ],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "sort": "none",
+          "timeStatic": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{path!=\"/metrics\", path!=\"/health\"}[5m])) by (le, method, path))",
+          "legendFormat": "{{method}} {{path}} - 95th Percentile",
+          "refId": "A"
+        }
+      ],
+      "title": "Latência (95º Percentil)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${datasource_name}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "current"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "sort": "none",
+          "timeStatic": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(flask_http_request_duration_seconds_count{path!=\"/metrics\", path!=\"/health\"}) by (method, path, status)",
+          "legendFormat": "{{method}} {{path}} ({{status}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Contagem Total de Requisições (Por Rota e Status)",
+      "type": "table"
     }
   ],
-  "schemaVersion": 37,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [
     "flask",
-    "application",
-    "host",
-    "complete",
-    "${environment}"
+    "api",
+    "prometheus",
+    "todo",
+    "${environment}" 
   ],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "${datasource_name}",
+          "value": "${datasource_name}"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "Fonte de dados Prometheus",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
   "time": {
-    "from": "now-6h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "uid": "todo-app-${environment}",
+  "title": "Flask API - Tarefas Chronyka (${environment} Environment)",
+  "uid": "flask-todo-api-${environment}",
   "version": 1
 }
