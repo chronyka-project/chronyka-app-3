@@ -27,6 +27,7 @@ locals {
   dashboard_config = jsondecode(
     templatefile("${path.module}/../dashboards/todo_metrics.json.tftpl", {
       environment = var.environment
+      datasource_name = grafana_data_source.prometheus.name
     })
   )
 }

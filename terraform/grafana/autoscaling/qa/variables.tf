@@ -12,7 +12,7 @@ variable "grafana_api_key" {
 variable "datasource_name" {
   description = "Nome da fonte de dados Prometheus no Grafana"
   type        = string
-  default     = "Prometheus"
+  default     = "Prometheus" # Altere se o nome da sua fonte de dados Prometheus for diferente
 }
 
 variable "environment" {
