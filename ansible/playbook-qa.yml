@@ -139,6 +139,16 @@
         owner: dev
         group: dev
         mode: '0755'
+    
+    - name: DEBUG Verificar o Conteúdo da Pasta de Testes Remota
+      ansible.builtin.command: ls -la /home/dev/app/qa-tests
+      register: test_files
+      become: yes
+      become_user: dev
+    
+    - name: Exibir arquivos de teste copiados
+      ansible.builtin.debug:
+        var: test_files.stdout_lines
 
     - name: Install Python test dependencies
       ansible.builtin.pip:
@@ -160,6 +170,9 @@
         chdir: /home/dev/app/qa-tests
       become: yes
       become_user: dev
+      environment:
+        # A URL que o Pytest irá usar
+        UNIFIED_APP_URL: "http://127.0.0.1:5000"
       register: test_results
 
     - name: Display Test Results

@@ -1,0 +1,146 @@
+---
+# ansible/prometheus/remove_target.yml
+# Playbook para remover target do Prometheus
+
+- name: Remove Target from Prometheus
+  hosts: all
+  become: yes
+  vars:
+    vm_ip_to_remove: "{{ vm_ip }}"
+    environment_name: "{{ environment }}"
+    app_name: "{{ app }}"
+    prometheus_targets_dir: "/etc/prometheus/targets"
+    prometheus_config_dir: "/etc/prometheus"
+    targets_file: "{{ prometheus_targets_dir }}/{{ app_name }}_{{ environment_name }}.yml"
+    prometheus_url: "http://localhost:9090"
+  
+  tasks:
+    - name: Check if targets file exists
+      stat:
+        path: "{{ targets_file }}"
+      register: targets_file_stat
+
+    - name: Display targets file status
+      debug:
+        msg: "Targets file {{ targets_file }} existe: {{ targets_file_stat.stat.exists }}"
+
+    - name: Create backup of targets file
+      copy:
+        src: "{{ targets_file }}"
+        dest: "{{ targets_file }}.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when: targets_file_stat.stat.exists
+
+    - name: Read current targets file
+      slurp:
+        src: "{{ targets_file }}"
+      register: targets_content
+      when: targets_file_stat.stat.exists
+
+    - name: Display current content (debug)
+      debug:
+        msg: "{{ targets_content['content'] | b64decode }}"
+      when: targets_file_stat.stat.exists
+
+    - name: Remove target from Prometheus targets file
+      lineinfile:
+        path: "{{ targets_file }}"
+        regexp: ".*'{{ vm_ip_to_remove }}:.*"
+        state: absent
+      when: targets_file_stat.stat.exists
+      register: remove_result
+
+    - name: Also remove without quotes (alternative format)
+      lineinfile:
+        path: "{{ targets_file }}"
+        regexp: ".*{{ vm_ip_to_remove }}:.*"
+        state: absent
+      when: targets_file_stat.stat.exists
+
+    - name: Check if targets file is now empty or only has structure
+      shell: |
+        # Remove comentários e linhas vazias, conta o que sobrou
+        grep -v '^#' "{{ targets_file }}" | grep -v '^\s*$' | grep -v '^---' | grep -v 'targets:' | wc -l
+      register: remaining_lines
+      when: targets_file_stat.stat.exists
+      changed_when: false
+
+    - name: Display remaining content
+      debug:
+        msg: "Linhas restantes no arquivo: {{ remaining_lines.stdout }}"
+      when: targets_file_stat.stat.exists
+
+    - name: Remove empty targets file
+      file:
+        path: "{{ targets_file }}"
+        state: absent
+      when: 
+        - targets_file_stat.stat.exists
+        - remaining_lines.stdout | int == 0
+
+    - name: Verify Prometheus is running
+      uri:
+        url: "{{ prometheus_url }}/-/healthy"
+        method: GET
+        status_code: 200
+      register: prometheus_health
+      ignore_errors: yes
+
+    - name: Reload Prometheus configuration
+      uri:
+        url: "{{ prometheus_url }}/-/reload"
+        method: POST
+        status_code: 200
+      when: prometheus_health is succeeded
+      register: reload_result
+      ignore_errors: yes
+
+    - name: Alternative reload via systemd
+      systemd:
+        name: prometheus
+        state: reloaded
+      when: reload_result is failed
+      ignore_errors: yes
+
+    - name: Wait for Prometheus to process reload
+      wait_for:
+        timeout: 5
+      delegate_to: localhost
+
+    - name: Verify target was removed
+      uri:
+        url: "{{ prometheus_url }}/api/v1/targets"
+        method: GET
+        return_content: yes
+      register: targets_api
+      ignore_errors: yes
+
+    - name: Check if removed IP still appears in active targets
+      set_fact:
+        ip_still_exists: "{{ targets_api.content | regex_search(vm_ip_to_remove) }}"
+      when: targets_api is succeeded
+      ignore_errors: yes
+
+    - name: Display removal status
+      debug:
+        msg: >
+          {% if ip_still_exists %}
+          ⚠️  ATENÇÃO: IP {{ vm_ip_to_remove }} ainda aparece nos targets ativos.
+          Pode levar alguns minutos para o Prometheus processar a remoção.
+          {% else %}
+          ✅ IP {{ vm_ip_to_remove }} removido com sucesso dos targets do Prometheus
+          {% endif %}
+      when: targets_api is succeeded
+
+    - name: Summary
+      debug:
+        msg:
+          - "=========================================="
+          - "Remoção de Target do Prometheus"
+          - "=========================================="
+          - "VM IP: {{ vm_ip_to_remove }}"
+          - "Ambiente: {{ environment_name }}"
+          - "App: {{ app_name }}"
+          - "Arquivo de targets: {{ targets_file }}"
+          - "Status: {% if targets_file_stat.stat.exists %}Processado{% else %}Não existia{% endif %}"
+          - "=========================================="
