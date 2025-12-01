@@ -17,13 +17,13 @@ env:
   TF_IN_AUTOMATION: true
 
 jobs:
-  terraform-dev-autoscaling:
+  terraform-qa-autoscaling:
     if: github.event_name == 'repository_dispatch' && github.event.action == 'scale-up-todo'
     runs-on: self-hosted
     outputs:
       new_vm_ip: ${{ steps.get-ip.outputs.new_vm_ip }}
     environment:
-      name: DEV
+      name: QA
 
     steps:
       - name: Checkout Repository
@@ -32,23 +32,23 @@ jobs:
       - name: Terraform Init
         id: init
         run: /usr/local/bin/terraform init
-        working-directory: ./terraform/autoscaling/dev
+        working-directory: ./terraform/autoscaling/qa
 
       - name: Terraform Plan
         id: plan
         run: /usr/local/bin/terraform plan -input=false -out=tfplan
-        working-directory: ./terraform/autoscaling/dev
+        working-directory: ./terraform/autoscaling/qa
         continue-on-error: true
         
       - name: Terraform Apply
         if: steps.plan.outcome == 'success'
         run: /usr/local/bin/terraform apply -auto-approve tfplan
-        working-directory: ./terraform/autoscaling/dev
+        working-directory: ./terraform/autoscaling/qa
 
       - name: Get VM IP and Set as Output
         id: get-ip
         run: echo "new_vm_ip=$(/usr/local/bin/terraform output -raw new_vm_ip)" >> $GITHUB_OUTPUT
-        working-directory: ./terraform/autoscaling/dev
+        working-directory: ./terraform/autoscaling/qa
 
       - name: Debug Event
         run: |
@@ -57,15 +57,15 @@ jobs:
           echo "PAYLOAD:"
           cat $GITHUB_EVENT_PATH
 
-  configure-vm-dev-autoscaling:
+  configure-vm-qa-autoscaling:
     runs-on: self-hosted
-    needs: [terraform-dev-autoscaling]
-    if: always() && needs.terraform-dev-autoscaling.result == 'success'
+    needs: [terraform-qa-autoscaling]
+    if: always() && needs.terraform-qa-autoscaling.result == 'success'
     outputs:
-      new_vm_ip: ${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}
+      new_vm_ip: ${{ needs.terraform-qa-autoscaling.outputs.new_vm_ip }}
     environment:
-      name: DEV
-      url: http://${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}:5000
+      name: QA
+      url: http://${{ needs.terraform-qa-autoscaling.outputs.new_vm_ip }}:5000
       
     env:
       ANSIBLE_HOST_KEY_CHECKING: "False"
@@ -81,7 +81,7 @@ jobs:
 
       - name: Remove chave SSH antiga do host (Corrige Host Key Changed)
         run: |
-          VM_IP="${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}"
+          VM_IP="${{ needs.terraform-qa-autoscaling.outputs.new_vm_ip }}"
           # O '|| true' garante que o pipeline não falhe se a chave não existir
           ssh-keygen -f /home/dev/.ssh/known_hosts -R "$VM_IP" || true
       
@@ -103,14 +103,14 @@ jobs:
         continue-on-error: true    
       
       - name: Run Ansible Playbook to Setup Flask
-        run: ansible-playbook -i ${{ needs.terraform-dev-autoscaling.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+        run: ansible-playbook -i ${{ needs.terraform-qa-autoscaling.outputs.new_vm_ip }}, ansible/playbook.yml --user ${{ env.ANSIBLE_USER }} --private-key /tmp/ansible_key -e "ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
 
-  update-haproxy-config-dev-autoscaling:
+  update-haproxy-config-qa-autoscaling:
     runs-on: self-hosted
-    needs: [configure-vm-dev-autoscaling]
-    if: always() && needs.configure-vm-dev-autoscaling.result == 'success'
+    needs: [configure-vm-qa-autoscaling]
+    if: always() && needs.configure-vm-qa-autoscaling.result == 'success'
     environment:
-      name: DEV
+      name: QA
 
     env:
       HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
@@ -131,16 +131,16 @@ jobs:
           ansible-playbook -i $HAPROXY_HOST, ansible/haproxy/haproxy_config.yml \
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
-            -e "new_vm_ip=${{ needs.configure-vm-dev-autoscaling.outputs.new_vm_ip }}" \
-            -e "backend_name=app_servers_todo_dev" \
+            -e "new_vm_ip=${{ needs.configure-vm-qa-autoscaling.outputs.new_vm_ip }}" \
+            -e "backend_name=app_servers_todo_qa" \
             -e "app_port=5000"
 
-  update-prometheus-targets-dev-autoscaling:
+  update-prometheus-targets-qa-autoscaling:
     runs-on: self-hosted
-    needs: [configure-vm-dev-autoscaling] 
-    if: always() && needs.configure-vm-dev-autoscaling.result == 'success'
+    needs: [configure-vm-qa-autoscaling] 
+    if: always() && needs.configure-vm-qa-autoscaling.result == 'success'
     environment:
-      name: DEV
+      name: QA
 
     env:
       PROMETHEUS_HOST: ${{ secrets.PROMETHEUS_SERVER_IP }}
@@ -162,19 +162,19 @@ jobs:
           ansible-playbook -i $PROMETHEUS_HOST, ansible/prometheus/prometheus_targets.yml \
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
-            -e "new_vm_ip=${{ needs.configure-vm-dev-autoscaling.outputs.new_vm_ip }}" \
-            -e "environment_name=dev" \
+            -e "new_vm_ip=${{ needs.configure-vm-qa-autoscaling.outputs.new_vm_ip }}" \
+            -e "environment_name=qa" \
             -e "app_name=todo"
         
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
   
-  update-grafana-dashboard-dev:
+  update-grafana-dashboard-qa:
     runs-on: self-hosted
-    needs: [configure-vm-dev-autoscaling, update-prometheus-targets-dev-autoscaling] 
-    if: always() && needs.update-prometheus-targets-dev-autoscaling.result == 'success'
+    needs: [configure-vm-qa-autoscaling, update-prometheus-targets-qa-autoscaling] 
+    if: always() && needs.update-prometheus-targets-qa-autoscaling.result == 'success'
     environment:
-      name: DEV
+      name: QA
       
     env:
       GRAFANA_HOST: ${{ secrets.MONITORING_VM_IP }} 
@@ -191,24 +191,24 @@ jobs:
 
       - name: Terraform Init (Grafana)
         run: terraform init
-        working-directory: ./terraform/grafana/autoscaling/dev
+        working-directory: ./terraform/grafana/autoscaling/qa
 
       - name: Terraform Apply (Grafana Dashboard)
         run: | 
           terraform apply -auto-approve \
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
-            -var "environment=dev-autoscaling"
-        working-directory: ./terraform/grafana/autoscaling/dev
+            -var "environment=qa-autoscaling"
+        working-directory: ./terraform/grafana/autoscaling/qa
 
 # ============================================================
-# DESTROY DEV ENVIRONMENT
+# DESTROY QA ENVIRONMENT
 # ============================================================
-  destroy-dev-autoscaling:
+  destroy-qa-autoscaling:
     if: github.event_name == 'repository_dispatch' && github.event.action == 'scale-down-todo'    
     runs-on: self-hosted
     environment:
-      name: DEV
+      name: QA
     
     env:
       HAPROXY_HOST: ${{ secrets.HAPROXY_SERVER_IP }}
@@ -226,7 +226,7 @@ jobs:
       - name: Get Current VM IP
         id: get-current-ip
         run: |
-          cd ./terraform/autoscaling/dev
+          cd ./terraform/autoscaling/qa
           /usr/local/bin/terraform init
           VM_IP=$(/usr/local/bin/terraform output -raw new_vm_ip 2>/dev/null || echo "")
           echo "current_vm_ip=$VM_IP" >> $GITHUB_OUTPUT
@@ -244,7 +244,7 @@ jobs:
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
             -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
-            -e "backend=app_servers_todo_dev"
+            -e "backend=app_servers_todo_qa"
           
           echo "✅ IP ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do HAProxy"
         continue-on-error: true
@@ -260,7 +260,7 @@ jobs:
             --user ${{ env.ANSIBLE_USER }} \
             --private-key /tmp/ansible_key \
             -e "vm_ip=${{ steps.get-current-ip.outputs.current_vm_ip }}" \
-            -e "environment=dev" \
+            -e "environment=qa" \
             -e "app=todo"
           
           echo "✅ Target ${{ steps.get-current-ip.outputs.current_vm_ip }} removido do Prometheus"
@@ -269,12 +269,12 @@ jobs:
       # PASSO 4: Destruir Dashboard do Grafana
       - name: Destroy Grafana Dashboard
         run: |
-          cd ./terraform/grafana/autoscaling/dev
+          cd ./terraform/grafana/autoscaling/qa
           /usr/local/bin/terraform init
           /usr/local/bin/terraform destroy -auto-approve \
             -var "grafana_url=http://${{ env.GRAFANA_HOST }}:3000" \
             -var "grafana_api_key=${{ env.GRAFANA_API_KEY }}" \
-            -var "environment=dev"
+            -var "environment=qa"
           
           echo "✅ Dashboard do Grafana destruído"
         continue-on-error: true
@@ -282,7 +282,7 @@ jobs:
       # PASSO 5: Destruir VM do VMware
       - name: Destroy VM from VMware
         run: |
-          cd ./terraform/autoscaling/dev
+          cd ./terraform/autoscaling/qa
           /usr/local/bin/terraform init
           /usr/local/bin/terraform destroy -auto-approve
           
