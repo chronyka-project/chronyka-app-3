@@ -4,7 +4,7 @@ on:
   repository_dispatch:
     types: 
       - scale-up-todo
-      - scale-down-todo
+      # - scale-down-todo
 
 env:
   TF_VAR_vsphere_server: ${{ secrets.VSPHERE_SERVER }}
@@ -32,7 +32,7 @@ jobs:
       - name: Terraform Init
         id: init
         run: /usr/local/bin/terraform init
-        working-directory: ./terraform/autoscaling/DEV
+        working-directory: ./terraform/autoscaling/dev
 
       - name: Terraform Plan
         id: plan
