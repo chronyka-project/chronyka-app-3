@@ -228,7 +228,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
   }
   
   network_interfaces {
-    associate_public_ip_address = true
+    associate_public_ip_address = false
     subnet_id = aws_subnet.todo-private[0].id
     security_groups             = [aws_security_group.todo-ec2-sg.id]
   }
