@@ -144,6 +144,12 @@ data "aws_ecr_repository" "todo_ecr" {
   name = var.app_name_todo
 }
 
+# Obter a imagem mais recente do ECR (para forçar atualização quando há novo push)
+data "aws_ecr_image" "todo_latest" {
+  repository_name = data.aws_ecr_repository.todo_ecr.name
+  image_tag       = "latest"
+}
+
 # --- 4. IAM Roles (CORRIGIDO PARA BUSCAR O PERFIL EXISTENTE) ---
 
 # Buscando o Role de Instância EC2 existente (LabRole)
@@ -151,16 +157,11 @@ data "aws_iam_role" "ec2_instance_role_existing" {
   name = "LabRole" 
 }
 
-# Corrigido o erro EntityAlreadyExists: 
-# Buscamos o perfil da instância com o nome estático, pois ele já existe na AWS
-# Recurso: Cria o perfil de instância e o associa ao Role existente.
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "${var.app_name_todo}-ec2-instance-profile"
   role = data.aws_iam_role.ec2_instance_role_existing.name
 }
 
-# O recurso aws_iam_instance_profile.ec2_instance_profile foi removido
-# Se você precisar que o Terraform crie o recurso novamente, primeiro delete ele manualmente na AWS.
 # --- 5. EC2 Launch Template (Instala Docker e Roda Container) ---
 
 # Usando o Amazon Linux 2 (otimizado para Docker)
@@ -208,6 +209,10 @@ data "template_file" "docker_user_data" {
     else
       echo "Falha ao fazer login no ECR. Verifique as permissões do LabRole."
     fi
+
+    # IMPORTANTE: Adiciona o digest da imagem como comentário para forçar mudança no user_data
+    # Isso faz o Launch Template ser recriado quando há uma nova imagem
+    # Digest: ${data.aws_ecr_image.todo_latest.image_digest}
   EOF
 }
 
@@ -224,10 +229,16 @@ resource "aws_launch_template" "ec2_instance_lt" {
   
   network_interfaces {
     associate_public_ip_address = true
+    subnet_id = aws_subnet.todo-private[0].id
     security_groups             = [aws_security_group.todo-ec2-sg.id]
   }
 
   user_data = base64encode(data.template_file.docker_user_data.rendered)
+
+  # Força a recriação do Launch Template quando o user_data muda
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # --- 6. Auto Scaling Group (ASG) ---
@@ -239,9 +250,13 @@ resource "aws_autoscaling_group" "ec2_asg" {
   max_size             = 2
   desired_capacity     = 1
 
+  # Health check type alterado para ELB para usar o health check do ALB
+  health_check_type         = "ELB"
+  health_check_grace_period = 300
+
   launch_template {
     id      = aws_launch_template.ec2_instance_lt.id
-    version = "$Latest"
+    version = aws_launch_template.ec2_instance_lt.latest_version
   }
 
   # Configura o ASG para anexar as instâncias ao Target Group
@@ -251,6 +266,24 @@ resource "aws_autoscaling_group" "ec2_asg" {
     key                 = "Name"
     value               = "${var.app_name_todo}-web-instance"
     propagate_at_launch = true
+  }
+
+  # CHAVE DA SOLUÇÃO: Instance Refresh automático
+  # Substitui instâncias quando o Launch Template muda
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 0  # Mantém pelo menos 50% das instâncias saudáveis durante atualização
+      skip_matching         = false # IMPORTANTE: Força substituição mesmo se parecer igual
+      instance_warmup        = 120 # Tempo de aquecimento da instância (5 minutos)
+    }
+    triggers = ["tag"]  # Inicia refresh quando tags ou launch template mudam
+  }
+  
+  lifecycle {
+    create_before_destroy = true
+    # Ignora mudanças em desired_capacity feitas por auto-scaling
+    ignore_changes = [desired_capacity]
   }
 }
 
