@@ -157,9 +157,8 @@ data "aws_iam_role" "ec2_instance_role_existing" {
   name = "LabRole" 
 }
 
-resource "aws_iam_instance_profile" "ec2_instance_profile" {
+data "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "${var.app_name_todo}-ec2-instance-profile"
-  role = data.aws_iam_role.ec2_instance_role_existing.name
 }
 
 # --- 5. EC2 Launch Template (Instala Docker e Roda Container) ---
