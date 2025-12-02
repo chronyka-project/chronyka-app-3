@@ -159,6 +159,7 @@ data "aws_iam_role" "ec2_instance_role_existing" {
 
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "${var.app_name_todo}-ec2-instance-profile"
+  role = data.aws_iam_role.ec2_instance_role_existing.name
 }
 
 # --- 5. EC2 Launch Template (Instala Docker e Roda Container) ---
@@ -225,7 +226,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
   }
   
   network_interfaces {
-    associate_public_ip_address = true
+    associate_public_ip_address = false
     security_groups             = [aws_security_group.todo-ec2-sg.id]
   }
 
@@ -241,7 +242,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
 
 resource "aws_autoscaling_group" "ec2_asg" {
   name                 = "${var.app_name_todo}-ec2-asg"
-  vpc_zone_identifier  = aws_subnet.todo-public.*.id
+  vpc_zone_identifier  = aws_subnet.todo-private.*.id
   min_size             = 1
   max_size             = 2
   desired_capacity     = 1
@@ -356,7 +357,7 @@ resource "aws_lb_target_group" "todo_tg" {
 
   health_check {
     # Assume que seu app tem um endpoint /health
-    path                = "/" 
+    path                = "/health" 
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
