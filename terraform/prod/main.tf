@@ -367,6 +367,9 @@ resource "aws_lb_target_group" "todo_tg" {
   }
   
   target_type = "instance"
+
+  # Drena conexões antes de remover instâncias
+  deregistration_delay = 30
 }
 
 resource "aws_lb_listener" "http_listener" {
