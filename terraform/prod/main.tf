@@ -356,7 +356,7 @@ resource "aws_lb_target_group" "todo_tg" {
 
   health_check {
     # Assume que seu app tem um endpoint /health
-    path                = "/health" 
+    path                = "/" 
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
