@@ -381,7 +381,8 @@ resource "aws_lb_listener" "http_listener" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.todo_tg.arn
   }
-  
+
+#TESTE
   lifecycle {
     create_before_destroy = true
   }
