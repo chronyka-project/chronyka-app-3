@@ -225,7 +225,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
   }
   
   network_interfaces {
-    associate_public_ip_address = false
+    associate_public_ip_address = true
     security_groups             = [aws_security_group.todo-ec2-sg.id]
   }
 
@@ -241,7 +241,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
 
 resource "aws_autoscaling_group" "ec2_asg" {
   name                 = "${var.app_name_todo}-ec2-asg"
-  vpc_zone_identifier  = aws_subnet.todo-private.*.id
+  vpc_zone_identifier  = aws_subnet.todo-public.*.id
   min_size             = 1
   max_size             = 2
   desired_capacity     = 1
