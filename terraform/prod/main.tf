@@ -157,7 +157,7 @@ data "aws_iam_role" "ec2_instance_role_existing" {
   name = "LabRole" 
 }
 
-data "aws_iam_instance_profile" "ec2_instance_profile" {
+resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "${var.app_name_todo}-ec2-instance-profile"
 }
 
@@ -221,7 +221,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
   
   # AQUI USAMOS O NOVO DATA SOURCE PARA O PERFIL DE INSTÂNCIA
   iam_instance_profile {
-    arn = data.aws_iam_instance_profile.ec2_instance_profile.arn
+    arn = aws_iam_instance_profile.ec2_instance_profile.arn
   }
   
   network_interfaces {
