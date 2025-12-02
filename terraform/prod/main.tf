@@ -192,13 +192,11 @@ data "template_file" "docker_user_data" {
     ECR_HOST=$(echo $REPO_URL | cut -d'/' -f1)
     
     # Configura credenciais do ECR usando o Instance Profile (LabRole)
-    aws ecr get-login-password --region ${var.region} |
-    docker login --username AWS --password-stdin $ECR_HOST
+    aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin $ECR_HOST
     
-    if [ $? -eq 0 ];
-    then
+    if [ $? -eq 0 ]; then
       echo "Login no ECR bem-sucedido."
-    # Puxa e executa o container
+      # Puxa e executa o container
       # Mapeia a porta do container (${var.container_port}) para a porta 80 do host
       docker run -d \
         --restart=always \
