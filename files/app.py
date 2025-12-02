@@ -114,9 +114,10 @@ def delete_item(item_id):
     return jsonify({"message": "Item deleted"}), 200
 
 # Rota de Health Check para o ALB
-@app.route("/health")
-def health():
-    return "ok", 200
+@app.route('/health', methods=['GET'])
+def health_check():
+    # Retorna uma resposta simples com status 200 OK
+    return jsonify({"status": "ok", "message": "API is healthy"}), 200
 
 
 if __name__ == '__main__':
