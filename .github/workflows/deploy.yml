@@ -66,9 +66,15 @@ jobs:
         run: /usr/local/bin/terraform plan -input=false -out=tfplan
         working-directory: ./terraform/dev
         continue-on-error: true
+      
+      - name: Check for changes
+        id: check-plan
+        run: |
+          CHANGES=$(/usr/local/bin/terraform show -json tfplan | jq '.resource_changes | length')
+          echo "changes=$CHANGES" >> $GITHUB_OUTPUT
         
       - name: Terraform Apply
-        if: steps.plan.outcome == 'success'
+        if: steps.check-plan.outputs.changes != '0'
         run: /usr/local/bin/terraform apply -auto-approve tfplan
         working-directory: ./terraform/dev
 
@@ -83,7 +89,7 @@ jobs:
   configure-vm-dev:
     runs-on: self-hosted
     needs: [terraform-dev]
-    if: always() && needs.terraform-dev.result == 'success'
+    if: always() && needs.terraform-dev.result == 'success' || needs.terraform-dev.result == 'skipped'
     outputs:
       new_vm_ip: ${{ needs.terraform-dev.outputs.new_vm_ip }}
     environment:

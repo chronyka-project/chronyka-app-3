@@ -199,7 +199,7 @@ data "template_file" "docker_user_data" {
     if [ $? -eq 0 ];
     then
       echo "Login no ECR bem-sucedido."
-    # Puxa e executa o container
+      # Puxa e executa o container
       # Mapeia a porta do container (${var.container_port}) para a porta 80 do host
       docker run -d \
         --restart=always \
@@ -224,7 +224,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
   
   # AQUI USAMOS O NOVO DATA SOURCE PARA O PERFIL DE INSTÂNCIA
   iam_instance_profile {
-    arn = aws_iam_instance_profile.ec2_instance_profile.arn
+    arn = data.aws_iam_instance_profile.ec2_instance_profile.arn
   }
   
   network_interfaces {
