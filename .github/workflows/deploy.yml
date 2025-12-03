@@ -66,16 +66,9 @@ jobs:
         run: /usr/local/bin/terraform plan -input=false -out=tfplan
         working-directory: ./terraform/dev
         continue-on-error: true
-      
-      - name: Check for changes
-        id: check-plan
-        run: |
-          CHANGES=$(/usr/local/bin/terraform show -json tfplan | jq '.resource_changes | length')
-          echo "changes=$CHANGES" >> $GITHUB_OUTPUT
-        working-directory: ./terraform/dev
         
       - name: Terraform Apply
-        if: steps.check-plan.outputs.changes != '0'
+        if: steps.plan.outcome == 'success'
         run: /usr/local/bin/terraform apply -auto-approve tfplan
         working-directory: ./terraform/dev
 
