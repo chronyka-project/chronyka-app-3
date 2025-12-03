@@ -19,7 +19,7 @@ on:
           - dev
           - qa
           - prod
-          - grafana
+          - autoscaling
 
       action_type:
         description: 'Selecione a Ação Manual (Deploy ou Destroy)'
@@ -785,7 +785,7 @@ jobs:
   # DESTROY QA ENVIRONMENT
   # ============================================================
   destroy-autoscaling:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'dev' && github.event.inputs.action_type == 'autoscaling'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'autoscaling' && github.event.inputs.action_type == 'destroy'
     runs-on: self-hosted
     environment:
       name: DEV
