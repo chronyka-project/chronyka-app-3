@@ -33,5 +33,22 @@ resource "vsphere_virtual_machine" "vm_dev_todo" {
   # Clonagem a partir de um template
   clone {
     template_uuid = data.vsphere_virtual_machine.template.id
+    customize {
+      # Use linux_options ou windows_options dependendo do seu template
+      linux_options { 
+        host_name = "dev-todo"
+        domain    = "local" # Altere conforme seu domínio
+      }
+
+      # Configuração Estática da Rede
+      network_interface {
+        # O IP AGORA É CONHECIDO NO PLAN!
+        ipv4_address = "172.16.58.4"  # <-- Use uma variável para o IP desejado!
+        ipv4_netmask = 21            # <-- Use uma variável para a máscara!
+      }
+
+      # Gateway da rede
+      ipv4_gateway = "172.16.58.254" # <-- Use uma variável para o gateway!
+    }
   }
 }

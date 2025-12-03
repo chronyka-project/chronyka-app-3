@@ -90,7 +90,7 @@ jobs:
   configure-vm-dev:
     runs-on: self-hosted
     needs: [terraform-dev]
-    if: always() && needs.terraform-dev.result == 'success' || needs.terraform-dev.result == 'skipped'
+    if: always() && needs.terraform-dev.result == 'success'
     outputs:
       new_vm_ip: ${{ needs.terraform-dev.outputs.new_vm_ip }}
     environment:
