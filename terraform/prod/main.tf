@@ -193,11 +193,9 @@ data "template_file" "docker_user_data" {
     ECR_HOST=$(echo $REPO_URL | cut -d'/' -f1)
     
     # Configura credenciais do ECR usando o Instance Profile (LabRole)
-    aws ecr get-login-password --region ${var.region} |
-    docker login --username AWS --password-stdin $ECR_HOST
+    aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin $ECR_HOST
     
-    if [ $? -eq 0 ];
-    then
+    if [ $? -eq 0 ]; then
       echo "Login no ECR bem-sucedido."
       # Puxa e executa o container
       # Mapeia a porta do container (${var.container_port}) para a porta 80 do host
@@ -229,7 +227,6 @@ resource "aws_launch_template" "ec2_instance_lt" {
   
   network_interfaces {
     associate_public_ip_address = false
-    subnet_id = aws_subnet.todo-private[0].id
     security_groups             = [aws_security_group.todo-ec2-sg.id]
   }
 
@@ -245,7 +242,7 @@ resource "aws_launch_template" "ec2_instance_lt" {
 
 resource "aws_autoscaling_group" "ec2_asg" {
   name                 = "${var.app_name_todo}-ec2-asg"
-  vpc_zone_identifier  = aws_subnet.todo-public.*.id
+  vpc_zone_identifier  = aws_subnet.todo-private.*.id
   min_size             = 1
   max_size             = 2
   desired_capacity     = 1
@@ -370,6 +367,9 @@ resource "aws_lb_target_group" "todo_tg" {
   }
   
   target_type = "instance"
+
+  # Drena conexões antes de remover instâncias
+  deregistration_delay = 30
 }
 
 resource "aws_lb_listener" "http_listener" {
