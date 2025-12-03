@@ -5,7 +5,7 @@
     --color-text: #1f2937; /* Cinza escuro */
     --color-bg: #f9fafb; /* Fundo claro */
     --color-danger: #ef4444; /* Vermelho para remover */
-    --color-success: #10b981; /* Verde para concluído */
+    --color-success: #000000; /* Verde para concluído */
     --color-muted: #9ca3af; /* Cinza suave para itens concluídos */
     --color-border: #d1d5db; /* Cor de borda padrão */
     --color-edit: #1d4ed8; /* Azul para editar */
