@@ -781,8 +781,8 @@ jobs:
           echo "✅ Cleanup concluído"
         continue-on-error: true
 
-        # ============================================================
-  # DESTROY QA ENVIRONMENT
+  # ============================================================
+  # DESTROY AUTOSCALING ENVIRONMENT
   # ============================================================
   destroy-autoscaling:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'autoscaling' && github.event.inputs.action_type == 'destroy'
