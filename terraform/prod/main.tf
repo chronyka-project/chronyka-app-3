@@ -243,9 +243,9 @@ resource "aws_launch_template" "ec2_instance_lt" {
 resource "aws_autoscaling_group" "ec2_asg" {
   name                 = "${var.app_name_todo}-ec2-asg"
   vpc_zone_identifier  = aws_subnet.todo-private.*.id
-  min_size             = 1
-  max_size             = 2
-  desired_capacity     = 1
+  min_size             = 2
+  max_size             = 3
+  desired_capacity     = 2
 
   # Health check type alterado para ELB para usar o health check do ALB
   health_check_type         = "ELB"
@@ -270,7 +270,7 @@ resource "aws_autoscaling_group" "ec2_asg" {
   instance_refresh {
     strategy = "Rolling"
     preferences {
-      min_healthy_percentage = 0  # Mantém pelo menos 50% das instâncias saudáveis durante atualização
+      min_healthy_percentage = 50  # Mantém pelo menos 50% das instâncias saudáveis durante atualização
       skip_matching         = false # IMPORTANTE: Força substituição mesmo se parecer igual
       instance_warmup        = 120 # Tempo de aquecimento da instância (5 minutos)
     }
