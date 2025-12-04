@@ -1,6 +1,6 @@
 /* style.css */
 :root {
-    --color-primary: #00897b; /* Teal vibrante */
+    --color-primary: #896400; /* Teal vibrante */
     --color-secondary: #f0fdf4; /* Verde claro suave */
     --color-text: #1f2937; /* Cinza escuro */
     --color-bg: #f9fafb; /* Fundo claro */
@@ -8,7 +8,7 @@
     --color-success: #000000; /* Verde para concluído */
     --color-muted: #9ca3af; /* Cinza suave para itens concluídos */
     --color-border: #d1d5db; /* Cor de borda padrão */
-    --color-edit: #1d4ed8; /* Azul para editar */
+    --color-edit: #3fd81d; /* Azul para editar */
 }
 
 * {
