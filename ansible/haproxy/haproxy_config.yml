@@ -5,10 +5,6 @@
 
   vars:
     haproxy_config_path: "/etc/haproxy/haproxy.cfg"
-    # Essas variáveis devem ser passadas no GitHub Actions
-    # new_vm_ip: IP da nova VM
-    # backend_name: Nome do backend (ex: app_servers_flask)
-    # app_port: Porta da aplicação (ex: 8000, 5000, 8080)
     server_name: "server-{{ backend_name | replace('_servers_', '-') }}-{{ new_vm_ip | replace('.', '-') }}" 
 
   tasks:
@@ -16,9 +12,7 @@
       ansible.builtin.lineinfile:
         path: "{{ haproxy_config_path }}"
         regexp: '^\s*server\s+{{ server_name }}'
-        # Agora o 'insertafter' precisa usar o nome do backend passado na variável
         insertafter: "^backend\\s+{{ backend_name }}$"
-        # A porta da aplicação é usada aqui
         line: "    server {{ server_name }} {{ new_vm_ip }}:{{ app_port }} check"
         state: present
         validate: "/usr/sbin/haproxy -c -f %s"
